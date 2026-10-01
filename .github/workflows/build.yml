@@ -44,11 +44,14 @@ jobs:
           name: LoneTube-apk
           path: LoneTube-v1.0.apk
 
-      - name: Create release with APK
+      - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.0 LoneTube-v1.0.apk \
-            --title "LoneTube v1.0" \
-            --notes "Premium media downloader powered by yt-dlp. YouTube, Instagram, Facebook and 1000+ sites in original quality. Turbo downloads (aria2c), quality picker, in-app browser with login, downloads library, animated premium UI. Personal use of your own content only." \
-            || gh release upload v1.0 LoneTube-v1.0.apk --clobber
+          if gh release view v1.0 > /dev/null 2>&1; then
+            gh release upload v1.0 LoneTube-v1.0.apk --clobber
+          else
+            gh release create v1.0 LoneTube-v1.0.apk \
+              --title "LoneTube v1.0" \
+              --notes "Premium media downloader powered by yt-dlp. YouTube, Instagram, Facebook and 1000+ sites in original quality. Turbo downloads (aria2c), quality picker, in-app browser with login, downloads library, animated premium UI. Personal use of your own content only."
+          fi
