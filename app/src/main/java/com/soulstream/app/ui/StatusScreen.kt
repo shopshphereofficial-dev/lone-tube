@@ -8,7 +8,6 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -63,7 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import com.soulstream.app.PlayActivity
 import com.soulstream.app.data.StatusItem
 import com.soulstream.app.data.Statuses
 import com.soulstream.app.ui.components.GhostButton
@@ -209,7 +208,13 @@ fun StatusScreen() {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(items, key = { it.file.absolutePath }) { item ->
-                        StatusTile(item, accentA) { preview = item }
+                        StatusTile(item, accentA) {
+                            if (item.isVideo) {
+                                playFile(ctx, item.file.absolutePath, item.file.name)
+                            } else {
+                                preview = item
+                            }
+                        }
                     }
                 }
             }
@@ -331,17 +336,7 @@ private fun StatusPreview(
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                if (item.isVideo) {
-                    AndroidView(
-                        factory = { c ->
-                            VideoView(c).apply {
-                                setVideoURI(Uri.fromFile(item.file))
-                                setOnPreparedListener { it.isLooping = true; start() }
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else if (bmp != null) {
+                if (bmp != null) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
                         contentDescription = null,
@@ -385,6 +380,18 @@ private fun StatusPreview(
                 }
             }
         }
+    }
+}
+
+private fun playFile(ctx: android.content.Context, path: String, title: String) {
+    try {
+        ctx.startActivity(
+            Intent(ctx, PlayActivity::class.java)
+                .putExtra("uri", Uri.fromFile(java.io.File(path)).toString())
+                .putExtra("title", title)
+        )
+    } catch (e: Exception) {
+        Toast.makeText(ctx, "Could not play this file", Toast.LENGTH_SHORT).show()
     }
 }
 
