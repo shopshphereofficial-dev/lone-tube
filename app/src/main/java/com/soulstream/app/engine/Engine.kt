@@ -3,9 +3,11 @@ package com.soulstream.app.engine
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.webkit.CookieManager
+import android.webkit.WebStorage
 import androidx.core.app.ActivityCompat
 import java.io.File
 
@@ -71,6 +73,34 @@ object Engine {
             ActivityCompat.requestPermissions(
                 activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1
             )
+        }
+    }
+
+    /** Wipes every login/cookie. Used by "Log out everywhere" and browser reset. */
+    fun resetBrowserData(context: Context) {
+        try {
+            val cm = CookieManager.getInstance()
+            cm.removeAllCookies(null)
+            cm.flush()
+        } catch (e: Throwable) {
+            // ignore
+        }
+        try {
+            WebStorage.getInstance().deleteAllData()
+        } catch (e: Throwable) {
+            // ignore
+        }
+    }
+
+    /** Opens a link in the phone's normal browser (escape hatch). */
+    fun openInSystemBrowser(context: Context, url: String) {
+        try {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Throwable) {
+            // ignore
         }
     }
 }

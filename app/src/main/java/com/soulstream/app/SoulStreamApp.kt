@@ -3,37 +3,25 @@ package com.soulstream.app
 import android.app.Application
 import android.content.Context
 import com.soulstream.app.data.Prefs
+import com.soulstream.app.engine.Diag
 import com.yausername.aria2c.Aria2c
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 
+/**
+ * Application + engine bootstrap.
+ *
+ * Everything here is guarded: a failure is recorded (engineError / Diag) and
+ * shown in the UI instead of leaving the app stuck with no explanation.
+ */
 class SoulStreamApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
         installCrashRecorder()
-        // Never let startup work take the app down: everything is guarded.
-        Thread {
-            try {
-                YoutubeDL.getInstance().init(this)
-                FFmpeg.getInstance().init(this)
-                Aria2c.getInstance().init(this)
-                engineReady = true
-            } catch (e: Throwable) {
-                startupError = e.message ?: e.javaClass.simpleName
-            }
-            try {
-                updateEngineIfStale(this)
-            } catch (e: Throwable) {
-                // offline is fine - it will retry next launch
-            }
-        }.start()
+        Thread { initEngine(this, force = false) }.start()
     }
 
-    /**
-     * Records the last uncaught error so the app can show it on the next
-     * launch instead of just vanishing. The original handler still runs.
-     */
     private fun installCrashRecorder() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -51,6 +39,7 @@ class SoulStreamApp : Application() {
                     }
                 }
                 Prefs.setLastCrash(this, msg)
+                Diag.log(this, "crash", msg)
             } catch (e: Throwable) {
                 // nothing we can do here
             }
@@ -60,20 +49,81 @@ class SoulStreamApp : Application() {
         }
     }
 
-    /** Keeps the yt-dlp engine fresh (once a day) so sites keep working. */
-    private fun updateEngineIfStale(context: Context) {
-        val last = Prefs.engineUpdatedAt(context)
-        val now = System.currentTimeMillis()
-        if (now - last < 24L * 60 * 60 * 1000) return
-        YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE)
-        Prefs.setEngineUpdatedAt(context, now)
-    }
-
     companion object {
+
         @Volatile
         var engineReady = false
 
+        /** Why the engine could not start (null when fine). */
         @Volatile
-        var startupError: String? = null
+        var engineError: String? = null
+
+        /** Extra note about the yt-dlp refresh. */
+        @Volatile
+        var engineNote: String? = null
+
+        private val lock = Object()
+
+        /**
+         * Initialises Python + ffmpeg + aria2c and makes sure yt-dlp itself is
+         * present (the library does NOT ship yt-dlp - it is fetched once and
+         * then refreshed daily). Never throws; records why on failure.
+         */
+        fun initEngine(ctx: Context, force: Boolean) {
+            synchronized(lock) {
+                if (engineReady && !force) return
+
+                try {
+                    YoutubeDL.getInstance().init(ctx)
+                    FFmpeg.getInstance().init(ctx)
+                    Aria2c.getInstance().init(ctx)
+                    engineReady = true
+                    engineError = null
+                    Diag.log(ctx, "engine", "init ok")
+                } catch (e: Throwable) {
+                    engineReady = false
+                    engineError = (e.message ?: e.javaClass.simpleName)
+                    Diag.log(ctx, "engine", "init FAILED: $engineError")
+                    return
+                }
+
+                // yt-dlp must exist for any download to work.
+                try {
+                    val last = Prefs.engineUpdatedAt(ctx)
+                    val now = System.currentTimeMillis()
+                    val stale = now - last > 24L * 60 * 60 * 1000
+                    if (force || stale) {
+                        YoutubeDL.getInstance()
+                            .updateYoutubeDL(ctx, YoutubeDL.UpdateChannel.STABLE)
+                        Prefs.setEngineUpdatedAt(ctx, now)
+                        engineNote = "yt-dlp refreshed"
+                        Diag.log(ctx, "engine", "yt-dlp refreshed")
+                    } else {
+                        Diag.log(ctx, "engine", "yt-dlp already fresh")
+                    }
+                } catch (e: Throwable) {
+                    val m = e.message ?: e.javaClass.simpleName
+                    engineNote = "yt-dlp refresh failed: $m"
+                    Diag.log(ctx, "engine", "yt-dlp refresh FAILED: $m")
+                }
+            }
+        }
+
+        /**
+         * Blocking wait for the downloader. Retries init a few times, then
+         * throws with the real reason so the user sees it.
+         */
+        fun awaitEngine(ctx: Context, timeoutMs: Long) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (!engineReady && System.currentTimeMillis() < deadline) {
+                initEngine(ctx, force = false)
+                if (!engineReady) Thread.sleep(800)
+            }
+            if (!engineReady) {
+                throw IllegalStateException(
+                    "engine not ready - " + (engineError ?: "unknown reason")
+                )
+            }
+        }
     }
 }
