@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.2.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.3.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.2.apk
+          path: SoulStream-v2.3.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.2 > /dev/null 2>&1; then
-            gh release upload v2.2 SoulStream-v2.2.apk --clobber
+          if gh release view v2.3 > /dev/null 2>&1; then
+            gh release upload v2.3 SoulStream-v2.3.apk --clobber
           else
-            gh release create v2.2 SoulStream-v2.2.apk \
-              --title "SoulStream v2.2" \
-              --notes "Engine failures are no longer silent: the real reason is shown on Home and in Settings, with one-tap repair. New on-device diagnostics report (copy/share). Downloads wait for the engine instead of failing, and a finished file is never reported as failed. Browser gets a retry/software-render fallback plus Open in Chrome."
+            gh release create v2.3 SoulStream-v2.3.apk \
+              --title "SoulStream v2.3" \
+              --notes "Downloads no longer depend on the aria2c turbo engine alone: if that pass fails the download is retried with yt-dlp's own downloader. minSdk lowered to Android 8 so it installs on older phones. Everything from v2.2: engine errors shown with one-tap repair, diagnostics report, browser retry + Open in Chrome."
           fi

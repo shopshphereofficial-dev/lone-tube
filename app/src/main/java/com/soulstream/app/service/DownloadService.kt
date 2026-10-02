@@ -88,11 +88,12 @@ class DownloadService : Service() {
                 }
 
                 val cookieFile = Engine.writeCookieFile(this@DownloadService, url)
-                val turbo = Prefs.turbo(this@DownloadService)
 
                 val title = try {
                     val infoRequest = YoutubeDLRequest(url)
-                    if (cookieFile != null) infoRequest.addOption("--cookies", cookieFile.absolutePath)
+                    if (cookieFile != null) {
+                        infoRequest.addOption("--cookies", cookieFile.absolutePath)
+                    }
                     YoutubeDL.getInstance().getInfo(infoRequest).title ?: url
                 } catch (e: Throwable) {
                     Diag.log(this, "dl", "title lookup failed: ${e.message}")
@@ -108,59 +109,39 @@ class DownloadService : Service() {
                 )
                 workDir.mkdirs()
 
-                val request = YoutubeDLRequest(url).apply {
-                    when (quality) {
-                        1 -> {
-                            addOption("-f", "bv*[height<=1080]+ba/b[height<=1080]")
-                            addOption("--merge-output-format", "mp4")
+                // 2) two passes: the turbo aria2c engine first (when enabled),
+                //    then yt-dlp's own downloader. aria2c is never the only way.
+                val preferAria = Prefs.turbo(this@DownloadService)
+                val passes = if (preferAria) listOf(true, false) else listOf(false)
+                var finished = false
+                var failure: Throwable? = null
+
+                for (useAria in passes) {
+                    workDir.listFiles()?.forEach { it.deleteRecursively() }
+                    try {
+                        val request = buildRequest(url, quality, workDir, cookieFile, useAria)
+                        YoutubeDL.getInstance().execute(request) { progress, _, line ->
+                            if (!line.isNullOrBlank()) lastLine = line
+                            val p = progress.toInt().coerceIn(0, 100)
+                            updateNotification(notifId, "Downloading: $title", p, true)
+                            LiveDownloads.upsert(
+                                ActiveJob(jobId, title, p, ActiveJob.Status.DOWNLOADING)
+                            )
                         }
-                        2 -> {
-                            addOption("-f", "bv*[height<=720]+ba/b[height<=720]")
-                            addOption("--merge-output-format", "mp4")
-                        }
-                        3 -> {
-                            addOption("-f", "bv*[height<=480]+ba/b[height<=480]")
-                            addOption("--merge-output-format", "mp4")
-                        }
-                        4 -> {
-                            addOption("-f", "bv*[height<=360]+ba/b[height<=360]")
-                            addOption("--merge-output-format", "mp4")
-                        }
-                        5 -> {
-                            addOption("-f", "ba/b")
-                            addOption("-x")
-                            addOption("--audio-format", "mp3")
-                            addOption("--audio-quality", "320K")
-                        }
-                        6 -> {
-                            addOption("-f", "ba/b")
-                            addOption("-x")
-                            addOption("--audio-format", "mp3")
-                            addOption("--audio-quality", "128K")
-                        }
-                        else -> {
-                            addOption("-f", "bv*+ba/b")
-                            addOption("--merge-output-format", "mp4")
-                        }
-                    }
-                    addOption("-o", workDir.absolutePath + "/%(title)s.%(ext)s")
-                    addOption("--no-playlist")
-                    addOption("--no-mtime")
-                    addOption("--no-warnings")
-                    addOption("--no-update")
-                    if (turbo) {
-                        addOption("--downloader", "libaria2c.so")
-                    }
-                    if (cookieFile != null) {
-                        addOption("--cookies", cookieFile.absolutePath)
+                        finished = true
+                        break
+                    } catch (e: Throwable) {
+                        failure = e
+                        Diag.log(
+                            this,
+                            "dl",
+                            "pass aria=$useAria failed: ${e.message ?: e.javaClass.simpleName}"
+                        )
                     }
                 }
 
-                YoutubeDL.getInstance().execute(request) { progress, _, line ->
-                    if (!line.isNullOrBlank()) lastLine = line
-                    val p = progress.toInt().coerceIn(0, 100)
-                    updateNotification(notifId, "Downloading: $title", p, true)
-                    LiveDownloads.upsert(ActiveJob(jobId, title, p, ActiveJob.Status.DOWNLOADING))
+                if (!finished) {
+                    throw (failure ?: IllegalStateException("the download failed"))
                 }
 
                 val file = workDir.listFiles()?.firstOrNull { it.isFile }
@@ -189,6 +170,62 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun buildRequest(
+        url: String,
+        quality: Int,
+        workDir: File,
+        cookieFile: File?,
+        useAria: Boolean
+    ): YoutubeDLRequest {
+        return YoutubeDLRequest(url).apply {
+            when (quality) {
+                1 -> {
+                    addOption("-f", "bv*[height<=1080]+ba/b[height<=1080]")
+                    addOption("--merge-output-format", "mp4")
+                }
+                2 -> {
+                    addOption("-f", "bv*[height<=720]+ba/b[height<=720]")
+                    addOption("--merge-output-format", "mp4")
+                }
+                3 -> {
+                    addOption("-f", "bv*[height<=480]+ba/b[height<=480]")
+                    addOption("--merge-output-format", "mp4")
+                }
+                4 -> {
+                    addOption("-f", "bv*[height<=360]+ba/b[height<=360]")
+                    addOption("--merge-output-format", "mp4")
+                }
+                5 -> {
+                    addOption("-f", "ba/b")
+                    addOption("-x")
+                    addOption("--audio-format", "mp3")
+                    addOption("--audio-quality", "320K")
+                }
+                6 -> {
+                    addOption("-f", "ba/b")
+                    addOption("-x")
+                    addOption("--audio-format", "mp3")
+                    addOption("--audio-quality", "128K")
+                }
+                else -> {
+                    addOption("-f", "bv*+ba/b")
+                    addOption("--merge-output-format", "mp4")
+                }
+            }
+            addOption("-o", workDir.absolutePath + "/%(title)s.%(ext)s")
+            addOption("--no-playlist")
+            addOption("--no-mtime")
+            addOption("--no-warnings")
+            addOption("--no-update")
+            if (useAria) {
+                addOption("--downloader", "libaria2c.so")
+            }
+            if (cookieFile != null) {
+                addOption("--cookies", cookieFile.absolutePath)
+            }
+        }
+    }
+
     private fun contentIntent(): PendingIntent? {
         return try {
             val i = Intent(this, MainActivity::class.java).apply {
@@ -205,7 +242,11 @@ class DownloadService : Service() {
         }
     }
 
-    private fun buildNotification(text: String, progress: Int, ongoing: Boolean): android.app.Notification {
+    private fun buildNotification(
+        text: String,
+        progress: Int,
+        ongoing: Boolean
+    ): android.app.Notification {
         val b = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("SoulStream")
