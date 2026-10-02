@@ -1,6 +1,7 @@
 package com.soulstream.app
 
 import android.annotation.SuppressLint
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -86,7 +87,6 @@ import com.soulstream.app.engine.ImageSaver
 import com.soulstream.app.engine.Session
 import com.soulstream.app.service.DownloadService
 import com.soulstream.app.ui.components.GlowButton
-import com.soulstream.app.ui.components.NeonBackground
 import com.soulstream.app.ui.components.NeonCard
 import com.soulstream.app.ui.components.PopIn
 import com.soulstream.app.ui.components.QualitySheet
@@ -107,11 +107,11 @@ import java.util.Collections
 import java.util.LinkedHashSet
 
 /**
- * SnapTube-style browser with Aloha-style detection:
- *  - Google search bar, back / forward / home / reload
- *  - ad networks blocked + ad slots hidden
- *  - watches every page for videos AND images and offers them in one tap
- *  - logins persist until you explicitly log out
+ * SnapTube-style browser with Aloha-style detection.
+ *
+ * LAYOUT NOTE: the WebView is an Android interop view and Compose draws over
+ * interop views, so the page rectangle must stay free of Compose-painted
+ * backgrounds. Only the top strip and bottom strip paint anything here.
  */
 class BrowserActivity : ComponentActivity() {
 
@@ -214,15 +214,16 @@ class BrowserActivity : ComponentActivity() {
                     }
                 }
 
-                NeonBackground(
-                    modifier = Modifier.fillMaxSize(),
-                    accentA = accentA,
-                    accentB = accentB
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .systemBarsPadding()
                 ) {
+                    // ---- top strip ----
                     Column(
                         Modifier
-                            .fillMaxSize()
-                            .systemBarsPadding()
+                            .fillMaxWidth()
+                            .background(Surface1.copy(alpha = 0.98f))
                     ) {
                         Row(
                             Modifier
@@ -271,7 +272,8 @@ class BrowserActivity : ComponentActivity() {
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -311,102 +313,111 @@ class BrowserActivity : ComponentActivity() {
                                 trackColor = Surface2
                             )
                         }
+                    }
 
-                        AndroidView(
-                            factory = { c ->
-                                WebView(c).apply {
-                                    layoutParams = ViewGroup.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
-                                    settings.javaScriptEnabled = true
-                                    settings.loadWithOverviewMode = true
-                                    settings.useWideViewPort = true
-                                    settings.mediaPlaybackRequiresUserGesture = false
-                                    settings.setSupportZoom(true)
-                                    settings.builtInZoomControls = true
-                                    settings.displayZoomControls = false
-                                    Session.prepare(this)
+                    // ---- page (kept free of Compose overlays) ----
+                    AndroidView(
+                        factory = { c ->
+                            WebView(c).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                setBackgroundColor(AndroidColor.WHITE)
+                                settings.javaScriptEnabled = true
+                                settings.loadWithOverviewMode = true
+                                settings.useWideViewPort = true
+                                settings.mediaPlaybackRequiresUserGesture = false
+                                settings.setSupportZoom(true)
+                                settings.builtInZoomControls = true
+                                settings.displayZoomControls = false
+                                Session.prepare(this)
 
-                                    webViewClient = object : WebViewClient() {
-                                        override fun onPageStarted(
-                                            view: WebView?,
-                                            url: String?,
-                                            favicon: android.graphics.Bitmap?
-                                        ) {
-                                            sniffedVideos.clear()
-                                            sniffedImages.clear()
-                                            url?.let {
-                                                currentUrl = it
-                                                address = it
-                                            }
-                                        }
-
-                                        override fun onPageFinished(view: WebView?, url: String?) {
-                                            loading = false
-                                            url?.let {
-                                                currentUrl = it
-                                                address = it
-                                            }
-                                            if (adBlockOn) {
-                                                view?.evaluateJavascript(AdBlock.cssInjection()) { }
-                                            }
-                                            view?.evaluateJavascript(scanJs) { result ->
-                                                try {
-                                                    val raw = JSONTokener(result).nextValue()
-                                                    val json = if (raw is String) raw else result
-                                                    val obj = JSONObject(json)
-                                                    val vArr: JSONArray = obj.optJSONArray("v") ?: JSONArray()
-                                                    val iArr: JSONArray = obj.optJSONArray("i") ?: JSONArray()
-                                                    for (i in 0 until vArr.length()) noteMedia(vArr.optString(i))
-                                                    for (i in 0 until iArr.length()) noteImage(iArr.optString(i))
-                                                } catch (e: Exception) {
-                                                    // nothing to grab on this page
-                                                }
-                                            }
-                                        }
-
-                                        override fun shouldInterceptRequest(
-                                            view: WebView?,
-                                            request: WebResourceRequest?
-                                        ): WebResourceResponse? {
-                                            val u = request?.url?.toString() ?: return null
-                                            if (adBlockOn && AdBlock.isBlocked(u)) {
-                                                return WebResourceResponse(
-                                                    "text/plain",
-                                                    "utf-8",
-                                                    ByteArrayInputStream(ByteArray(0))
-                                                )
-                                            }
-                                            noteMedia(u)
-                                            noteImage(u)
-                                            return null
+                                webViewClient = object : WebViewClient() {
+                                    override fun onPageStarted(
+                                        view: WebView?,
+                                        url: String?,
+                                        favicon: android.graphics.Bitmap?
+                                    ) {
+                                        sniffedVideos.clear()
+                                        sniffedImages.clear()
+                                        url?.let {
+                                            currentUrl = it
+                                            address = it
                                         }
                                     }
-                                    webChromeClient = object : WebChromeClient() {
-                                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                            progress = newProgress / 100f
-                                            loading = newProgress < 100
+
+                                    override fun onPageFinished(view: WebView?, url: String?) {
+                                        loading = false
+                                        url?.let {
+                                            currentUrl = it
+                                            address = it
+                                        }
+                                        if (adBlockOn) {
+                                            view?.evaluateJavascript(AdBlock.cssInjection()) { }
+                                        }
+                                        view?.evaluateJavascript(scanJs) { result ->
+                                            try {
+                                                val raw = JSONTokener(result).nextValue()
+                                                val json = if (raw is String) raw else result
+                                                val obj = JSONObject(json)
+                                                val vArr: JSONArray = obj.optJSONArray("v") ?: JSONArray()
+                                                val iArr: JSONArray = obj.optJSONArray("i") ?: JSONArray()
+                                                for (i in 0 until vArr.length()) noteMedia(vArr.optString(i))
+                                                for (i in 0 until iArr.length()) noteImage(iArr.optString(i))
+                                            } catch (e: Exception) {
+                                                // nothing to grab on this page
+                                            }
                                         }
                                     }
-                                    loadUrl(startUrl)
-                                    webView = this
+
+                                    override fun shouldInterceptRequest(
+                                        view: WebView?,
+                                        request: WebResourceRequest?
+                                    ): WebResourceResponse? {
+                                        val u = request?.url?.toString() ?: return null
+                                        val mainFrame = request?.isForMainFrame == true
+                                        if (!mainFrame && adBlockOn && AdBlock.isBlocked(u)) {
+                                            return WebResourceResponse(
+                                                "text/plain",
+                                                "utf-8",
+                                                ByteArrayInputStream(ByteArray(0))
+                                            )
+                                        }
+                                        noteMedia(u)
+                                        noteImage(u)
+                                        return null
+                                    }
                                 }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        )
+                                webChromeClient = object : WebChromeClient() {
+                                    override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                        progress = newProgress / 100f
+                                        loading = newProgress < 100
+                                    }
+                                }
+                                loadUrl(startUrl)
+                                webView = this
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    )
 
+                    // ---- bottom strip ----
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Surface1.copy(alpha = 0.98f))
+                    ) {
                         if (videos.isNotEmpty() || images.isNotEmpty()) {
                             GrabPill(videos.size, images.size, accentA, accentB) { showGrab = true }
                         }
-
                         GlowButton(
                             text = "DOWNLOAD THIS PAGE",
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .padding(12.dp),
                             icon = Icons.Rounded.Download,
                             enabled = !loading,
                             accentA = accentA,
@@ -421,53 +432,53 @@ class BrowserActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
 
-                    if (showGrab) {
-                        GrabSheet(
-                            pageTitle = webView?.title ?: currentUrl,
-                            pageUrl = webView?.url ?: currentUrl,
-                            videos = videos,
-                            images = images,
-                            accentA = accentA,
-                            accentB = accentB,
-                            onDismiss = { showGrab = false },
-                            onPickPage = { target ->
-                                showGrab = false
-                                if (Prefs.askQuality(ctx)) {
-                                    pendingUrl = target
-                                    showQuality = true
-                                } else {
-                                    startIt(target, Prefs.defaultQuality(ctx))
-                                }
-                            },
-                            onPickVideo = { target ->
-                                showGrab = false
-                                if (Prefs.askQuality(ctx)) {
-                                    pendingUrl = target
-                                    showQuality = true
-                                } else {
-                                    startIt(target, Prefs.defaultQuality(ctx))
-                                }
-                            },
-                            onPickImage = { img ->
-                                showGrab = false
-                                scope.launch {
-                                    val msg = withContext(Dispatchers.IO) { ImageSaver.save(ctx, img) }
-                                    Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-                                }
+                if (showGrab) {
+                    GrabSheet(
+                        pageTitle = webView?.title ?: currentUrl,
+                        pageUrl = webView?.url ?: currentUrl,
+                        videos = videos,
+                        images = images,
+                        accentA = accentA,
+                        accentB = accentB,
+                        onDismiss = { showGrab = false },
+                        onPickPage = { target ->
+                            showGrab = false
+                            if (Prefs.askQuality(ctx)) {
+                                pendingUrl = target
+                                showQuality = true
+                            } else {
+                                startIt(target, Prefs.defaultQuality(ctx))
                             }
-                        )
-                    }
+                        },
+                        onPickVideo = { target ->
+                            showGrab = false
+                            if (Prefs.askQuality(ctx)) {
+                                pendingUrl = target
+                                showQuality = true
+                            } else {
+                                startIt(target, Prefs.defaultQuality(ctx))
+                            }
+                        },
+                        onPickImage = { img ->
+                            showGrab = false
+                            scope.launch {
+                                val msg = withContext(Dispatchers.IO) { ImageSaver.save(ctx, img) }
+                                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
 
-                    if (showQuality) {
-                        QualitySheet(
-                            onDismiss = { showQuality = false },
-                            onPick = { q ->
-                                showQuality = false
-                                startIt(pendingUrl, q)
-                            }
-                        )
-                    }
+                if (showQuality) {
+                    QualitySheet(
+                        onDismiss = { showQuality = false },
+                        onPick = { q ->
+                            showQuality = false
+                            startIt(pendingUrl, q)
+                        }
+                    )
                 }
             }
         }
@@ -537,46 +548,45 @@ private fun GrabPill(videoCount: Int, imageCount: Int, accentA: Color, accentB: 
         ),
         label = "pillPulse"
     )
-    PopIn {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(accentA.copy(alpha = 0.28f), accentB.copy(alpha = 0.24f))
-                    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(accentA.copy(alpha = 0.28f), accentB.copy(alpha = 0.24f))
                 )
-                .border(1.dp, accentA.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .scale(pulse)
-                    .clip(RoundedCornerShape(50))
-                    .background(accentA)
             )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                buildString {
-                    append("$videoCount video")
-                    if (videoCount != 1) append("s")
-                    if (imageCount > 0) {
-                        append(" + $imageCount image")
-                        if (imageCount != 1) append("s")
-                    }
-                    append(" found - tap to grab")
-                },
-                color = OnDark,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(Icons.Rounded.Bolt, contentDescription = null, tint = accentA, modifier = Modifier.size(18.dp))
-        }
+            .border(1.dp, accentA.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .scale(pulse)
+                .clip(RoundedCornerShape(50))
+                .background(accentA)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            buildString {
+                append("$videoCount video")
+                if (videoCount != 1) append("s")
+                if (imageCount > 0) {
+                    append(" + $imageCount image")
+                    if (imageCount != 1) append("s")
+                }
+                append(" found - tap to grab")
+            },
+            color = OnDark,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(Icons.Rounded.Bolt, contentDescription = null, tint = accentA, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -619,22 +629,24 @@ private fun GrabSheet(
             )
             Spacer(Modifier.height(14.dp))
 
-            GrabRow(
-                icon = Icons.Rounded.Language,
-                title = "This page - best quality",
-                subtitle = pageTitle.ifBlank { pageUrl },
-                accent = accentA,
-                delay = 0
-            ) { onPickPage(pageUrl) }
+            PopIn {
+                GrabRow(
+                    icon = Icons.Rounded.Language,
+                    title = "This page - best quality",
+                    subtitle = pageTitle.ifBlank { pageUrl },
+                    accent = accentA
+                ) { onPickPage(pageUrl) }
+            }
 
             videos.take(8).forEachIndexed { i, u ->
-                GrabRow(
-                    icon = Icons.Rounded.Movie,
-                    title = "Video file",
-                    subtitle = u,
-                    accent = accentA,
-                    delay = 40 * (i + 1)
-                ) { onPickVideo(u) }
+                PopIn(delayMillis = 40 * (i + 1)) {
+                    GrabRow(
+                        icon = Icons.Rounded.Movie,
+                        title = "Video file",
+                        subtitle = u,
+                        accent = accentA
+                    ) { onPickVideo(u) }
+                }
             }
 
             if (images.isNotEmpty()) {
@@ -642,13 +654,14 @@ private fun GrabSheet(
                 Text("IMAGES", style = MaterialTheme.typography.labelSmall, color = Muted)
                 Spacer(Modifier.height(8.dp))
                 images.take(8).forEachIndexed { i, u ->
-                    GrabRow(
-                        icon = Icons.Rounded.Image,
-                        title = "Save image to gallery",
-                        subtitle = u,
-                        accent = accentB,
-                        delay = 40 * (i + 1)
-                    ) { onPickImage(u) }
+                    PopIn(delayMillis = 40 * (i + 1)) {
+                        GrabRow(
+                            icon = Icons.Rounded.Image,
+                            title = "Save image to gallery",
+                            subtitle = u,
+                            accent = accentB
+                        ) { onPickImage(u) }
+                    }
                 }
             }
         }
@@ -661,35 +674,32 @@ private fun GrabRow(
     title: String,
     subtitle: String,
     accent: Color,
-    delay: Int,
     onClick: () -> Unit
 ) {
-    PopIn(delayMillis = delay) {
-        NeonCard(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            accent = accent
+    NeonCard(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        accent = accent
+    ) {
+        Row(
+            Modifier.clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                Modifier.clickable(onClick = onClick),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(title, color = OnDark, style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        subtitle,
-                        color = Muted,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Icon(Icons.Rounded.Download, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = OnDark, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    subtitle,
+                    color = Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+            Icon(Icons.Rounded.Download, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
         }
     }
 }
