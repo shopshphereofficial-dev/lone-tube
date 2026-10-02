@@ -1,20 +1,21 @@
+# ---- Never obfuscate: names stay exactly as written ----
+-dontobfuscate
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+
 # ---- yt-dlp / ffmpeg / aria2c engine (reached through JNI) ----
 -keep class com.yausername.** { *; }
 -dontwarn com.yausername.**
--dontwarn com.yausername.youtubedl_android.**
 
-# ---- WebView JavaScript bridge (used by the video detector) ----
+# ---- Our own code: keep everything (the app is small, safety first) ----
+-keep class com.soulstream.** { *; }
+
+# ---- WebView JavaScript bridges ----
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
--keepattributes JavascriptInterface
 
-# ---- App model / storage classes ----
--keep class com.lonetube.app.data.** { *; }
--keep class com.lonetube.app.engine.** { *; }
-
-# ---- Kotlin metadata kept for reflection safety ----
--keepattributes Signature,InnerClasses,EnclosingMethod
+# ---- Quiet the usual library noise ----
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+-dontwarn org.slf4j.**

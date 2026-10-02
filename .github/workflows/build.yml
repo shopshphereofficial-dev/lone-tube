@@ -33,28 +33,28 @@ jobs:
           gradle-version: '8.7'
 
       - name: Restore signing key
-        run: base64 -d keystore.b64 > app/lonetube.p12
+        run: base64 -d keystore.b64 > app/soulstream.p12
 
-      - name: Build release APK (R8 minified)
+      - name: Build release APK (shrunk, names kept)
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk LoneTube-v1.1.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.0.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LoneTube-apk
-          path: LoneTube-v1.1.apk
+          name: SoulStream-apk
+          path: SoulStream-v2.0.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v1.1 > /dev/null 2>&1; then
-            gh release upload v1.1 LoneTube-v1.1.apk --clobber
+          if gh release view v2.0 > /dev/null 2>&1; then
+            gh release upload v2.0 SoulStream-v2.0.apk --clobber
           else
-            gh release create v1.1 LoneTube-v1.1.apk \
-              --title "LoneTube v1.1" \
-              --notes "Smaller (R8-minified), WhatsApp status saver, SnapTube-style Google browser and Aloha-style video detection on any website."
+            gh release create v2.0 SoulStream-v2.0.apk \
+              --title "SoulStream v2.0" \
+              --notes "Gamer-grade rebuild: neon animated UI, ad-free browser, WhatsApp status vault, in-app player, image grabbing, persistent logins."
           fi
