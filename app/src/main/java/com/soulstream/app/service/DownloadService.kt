@@ -2,6 +2,7 @@ package com.soulstream.app.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.ContentValues
 import android.content.Context
@@ -13,10 +14,13 @@ import android.os.IBinder
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.soulstream.app.MainActivity
+import com.soulstream.app.SoulStreamApp
 import com.soulstream.app.data.ActiveJob
 import com.soulstream.app.data.History
 import com.soulstream.app.data.LiveDownloads
 import com.soulstream.app.data.Prefs
+import com.soulstream.app.engine.Diag
 import com.soulstream.app.engine.Engine
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -61,15 +65,28 @@ class DownloadService : Service() {
             } else {
                 startForeground(notifId, initial)
             }
-        } catch (e: Exception) {
-            // If the system refuses the foreground start, carry on anyway.
+        } catch (e: Throwable) {
+            Diag.log(this, "dl", "startForeground refused: ${e.message}")
         }
 
         active.incrementAndGet()
         LiveDownloads.upsert(ActiveJob(jobId, "Preparing...", 0, ActiveJob.Status.PREPARING))
+        Diag.log(this, "dl", "queued ${Engine.qualityLabel(quality)} $url")
 
         Thread {
+            var lastLine = ""
             try {
+                // 1) the engine must be alive - wait for it instead of failing
+                updateNotification(notifId, "Warming up engine...", 0, true)
+                try {
+                    SoulStreamApp.awaitEngine(this@DownloadService, 60_000)
+                } catch (e: Throwable) {
+                    throw IllegalStateException(
+                        "Engine could not start: " +
+                            (SoulStreamApp.engineError ?: e.message ?: "unknown")
+                    )
+                }
+
                 val cookieFile = Engine.writeCookieFile(this@DownloadService, url)
                 val turbo = Prefs.turbo(this@DownloadService)
 
@@ -77,7 +94,8 @@ class DownloadService : Service() {
                     val infoRequest = YoutubeDLRequest(url)
                     if (cookieFile != null) infoRequest.addOption("--cookies", cookieFile.absolutePath)
                     YoutubeDL.getInstance().getInfo(infoRequest).title ?: url
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
+                    Diag.log(this, "dl", "title lookup failed: ${e.message}")
                     url
                 }
 
@@ -138,25 +156,31 @@ class DownloadService : Service() {
                     }
                 }
 
-                YoutubeDL.getInstance().execute(request) { progress, _, _ ->
+                YoutubeDL.getInstance().execute(request) { progress, _, line ->
+                    if (!line.isNullOrBlank()) lastLine = line
                     val p = progress.toInt().coerceIn(0, 100)
                     updateNotification(notifId, "Downloading: $title", p, true)
                     LiveDownloads.upsert(ActiveJob(jobId, title, p, ActiveJob.Status.DOWNLOADING))
                 }
 
                 val file = workDir.listFiles()?.firstOrNull { it.isFile }
-                    ?: throw Exception("downloaded file not found")
+                    ?: throw IllegalStateException("the engine finished but produced no file")
                 val mime = mimeFor(file)
                 val size = file.length()
-                val savedUri = saveToDownloads(file, mime)
-                History.add(this@DownloadService, file.name, size, savedUri.toString(), mime)
+                val saved = saveResult(file, mime)
+                History.add(this@DownloadService, file.name, size, saved, mime)
                 workDir.deleteRecursively()
                 LiveDownloads.upsert(ActiveJob(jobId, file.name, 100, ActiveJob.Status.DONE))
+                Diag.clearDownloadError(this)
+                Diag.log(this, "dl", "done ${file.name} ${size / 1024} KB")
                 finishWith(notifId, "Done: ${file.name}", true)
-            } catch (e: Exception) {
-                val msg = e.message ?: "unknown error"
+            } catch (e: Throwable) {
+                val msg = e.message ?: lastLine.ifBlank { "unknown error" }
+                val detail = if (lastLine.isBlank()) msg else "$msg  |  ${lastLine.take(220)}"
                 LiveDownloads.upsert(ActiveJob(jobId, msg, 0, ActiveJob.Status.FAILED))
-                finishWith(notifId, "Failed: $msg", false)
+                Diag.setDownloadError(this, detail)
+                Diag.log(this, "dl", "FAILED: $detail")
+                finishWith(notifId, "Failed: ${msg.take(120)}", false)
             } finally {
                 if (active.decrementAndGet() == 0) stopSelf()
             }
@@ -165,39 +189,64 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun contentIntent(): PendingIntent? {
+        return try {
+            val i = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            PendingIntent.getActivity(
+                this,
+                0,
+                i,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     private fun buildNotification(text: String, progress: Int, ongoing: Boolean): android.app.Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val b = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("SoulStream")
             .setContentText(text)
             .setOngoing(ongoing)
             .setOnlyAlertOnce(true)
             .setProgress(100, progress, progress <= 0)
-            .build()
+        contentIntent()?.let { b.setContentIntent(it) }
+        return b.build()
     }
 
     private fun updateNotification(notifId: Int, text: String, progress: Int, ongoing: Boolean) {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(notifId, buildNotification(text, progress, ongoing))
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(notifId, buildNotification(text, progress, ongoing))
+        } catch (e: Throwable) {
+            // a missing notification must never kill a download
+        }
     }
 
     private fun finishWith(notifId: Int, text: String, ok: Boolean) {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // ignore
         }
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val n = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(
-                if (ok) android.R.drawable.stat_sys_download_done
-                else android.R.drawable.stat_notify_error
-            )
-            .setContentTitle("SoulStream")
-            .setContentText(text)
-            .setAutoCancel(true)
-            .build()
-        nm.notify(notifId, n)
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val b = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(
+                    if (ok) android.R.drawable.stat_sys_download_done
+                    else android.R.drawable.stat_notify_error
+                )
+                .setContentTitle("SoulStream")
+                .setContentText(text)
+                .setAutoCancel(true)
+            contentIntent()?.let { b.setContentIntent(it) }
+            nm.notify(notifId, b.build())
+        } catch (e: Throwable) {
+            // ignore
+        }
     }
 
     private fun mimeFor(file: File): String {
@@ -213,21 +262,40 @@ class DownloadService : Service() {
         }
     }
 
-    private fun saveToDownloads(file: File, mime: String): Uri {
-        val resolver = contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, file.name)
-            put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.IS_PENDING, 1)
+    /**
+     * Saves to the public Downloads folder. If MediaStore refuses (it happens),
+     * the file still lands in the app's own Downloads folder - a finished
+     * download is never reported as a failure.
+     */
+    private fun saveResult(file: File, mime: String): String {
+        try {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, file.name)
+                put(MediaStore.Downloads.MIME_TYPE, mime)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri: Uri? = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                }
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                return uri.toString()
+            }
+        } catch (e: Throwable) {
+            Diag.log(this, "dl", "MediaStore save failed: ${e.message}")
         }
-        val uri: Uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw Exception("could not save to Downloads")
-        resolver.openOutputStream(uri)?.use { out ->
-            file.inputStream().use { it.copyTo(out) }
+        return try {
+            val dir = File(getExternalFilesDir(null), "SoulStream")
+            dir.mkdirs()
+            val target = File(dir, file.name)
+            file.copyTo(target, overwrite = true)
+            target.absolutePath
+        } catch (e: Throwable) {
+            Diag.log(this, "dl", "fallback save failed: ${e.message}")
+            file.absolutePath
         }
-        values.clear()
-        values.put(MediaStore.Downloads.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        return uri
     }
 }

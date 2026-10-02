@@ -3,6 +3,7 @@ package com.soulstream.app
 import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.webkit.WebChromeClient
@@ -76,11 +77,13 @@ import com.soulstream.app.engine.Engine
 import com.soulstream.app.engine.ImageSaver
 import com.soulstream.app.engine.Session
 import com.soulstream.app.service.DownloadService
+import com.soulstream.app.ui.components.GhostButton
 import com.soulstream.app.ui.components.GlowButton
 import com.soulstream.app.ui.components.NeonCard
 import com.soulstream.app.ui.components.PopIn
 import com.soulstream.app.ui.components.QualitySheet
 import com.soulstream.app.ui.theme.Muted
+import com.soulstream.app.ui.theme.NeonAmber
 import com.soulstream.app.ui.theme.OnDark
 import com.soulstream.app.ui.theme.SoulTheme
 import com.soulstream.app.ui.theme.Surface1
@@ -145,6 +148,8 @@ class BrowserActivity : ComponentActivity() {
     private var showQuality by mutableStateOf(false)
     private var showGrab by mutableStateOf(false)
     private var pendingUrl by mutableStateOf("")
+    private var pageBlank by mutableStateOf(false)
+    private var softwareMode by mutableStateOf(false)
 
     private lateinit var webView: WebView
 
@@ -223,6 +228,12 @@ class BrowserActivity : ComponentActivity() {
                         address = it
                     }
                     pageTitle = view?.title ?: ""
+                    view?.evaluateJavascript(
+                        "(document.body?document.body.scrollHeight:0)"
+                    ) { h ->
+                        val v = h?.trim('"')?.toFloatOrNull() ?: 0f
+                        pageBlank = v < 60f
+                    }
                     if (blocked) {
                         view?.evaluateJavascript(AdBlock.cssInjection()) { }
                     }
@@ -445,6 +456,34 @@ class BrowserActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .background(Surface1.copy(alpha = 0.98f))
                 ) {
+                    if (pageBlank) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp)
+                                .padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Page didn't paint on this device",
+                                color = NeonAmber,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            GhostButton(text = "Retry", accent = accentA) {
+                                if (!softwareMode) {
+                                    softwareMode = true
+                                    webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                                }
+                                pageBlank = false
+                                webView.reload()
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            GhostButton(text = "Chrome", accent = accentB) {
+                                Engine.openInSystemBrowser(this@BrowserActivity, pageUrl)
+                            }
+                        }
+                    }
                     if (videos.isNotEmpty() || images.isNotEmpty()) {
                         GrabPill(videos.size, images.size, accentA, accentB) { showGrab = true }
                     }
