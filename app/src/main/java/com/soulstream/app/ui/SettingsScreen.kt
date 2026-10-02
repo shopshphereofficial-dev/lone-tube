@@ -1,5 +1,9 @@
 package com.soulstream.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -25,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -45,8 +50,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.soulstream.app.SoulStreamApp
 import com.soulstream.app.data.History
 import com.soulstream.app.data.Prefs
+import com.soulstream.app.engine.AppInfo
+import com.soulstream.app.engine.Diag
 import com.soulstream.app.engine.Engine
 import com.soulstream.app.engine.Session
 import com.soulstream.app.ui.components.GhostButton
@@ -57,6 +65,8 @@ import com.soulstream.app.ui.components.SectionLabel
 import com.soulstream.app.ui.theme.Accents
 import com.soulstream.app.ui.theme.Hairline
 import com.soulstream.app.ui.theme.Muted
+import com.soulstream.app.ui.theme.NeonLime
+import com.soulstream.app.ui.theme.NeonRed
 import com.soulstream.app.ui.theme.OnDark
 import com.soulstream.app.ui.theme.Surface2
 import com.yausername.youtubedl_android.YoutubeDL
@@ -79,6 +89,9 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
     var autoClip by remember { mutableStateOf(Prefs.autoClipboard(ctx)) }
     var updating by remember { mutableStateOf(false) }
     var updateMsg by remember { mutableStateOf<String?>(null) }
+    var engineReady by remember { mutableStateOf(SoulStreamApp.engineReady) }
+    var engineErr by remember { mutableStateOf(SoulStreamApp.engineError) }
+    var dlErr by remember { mutableStateOf(Diag.lastDownloadError(ctx)) }
 
     Column(
         Modifier
@@ -96,6 +109,143 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
         Spacer(Modifier.height(14.dp))
 
         PopIn {
+            NeonCard(Modifier.fillMaxWidth(), accent = if (engineReady) accentA else NeonRed) {
+                SectionLabel("Engine health", if (engineReady) accentA else NeonRed)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (engineReady) "ENGINE READY" else "ENGINE NOT READY",
+                        color = if (engineReady) NeonLime else NeonRed,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    SoulStreamApp.engineNote
+                        ?: if (engineReady) "yt-dlp + ffmpeg + aria2c loaded"
+                        else "Downloads cannot run until this is fixed",
+                    color = Muted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (engineErr != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("error: $engineErr", color = NeonRed, style = MaterialTheme.typography.bodySmall)
+                }
+                if (dlErr != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("last download error:", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text(dlErr ?: "", color = NeonRed, style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GlowButton(
+                        text = if (updating) "FIXING..." else "REPAIR",
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.SystemUpdateAlt,
+                        enabled = !updating,
+                        accentA = accentA,
+                        accentB = accentB
+                    ) {
+                        updating = true
+                        updateMsg = null
+                        scope.launch {
+                            val res = withContext(Dispatchers.IO) {
+                                try {
+                                    SoulStreamApp.initEngine(ctx, force = true)
+                                    if (SoulStreamApp.engineReady) {
+                                        "Engine ready" + (SoulStreamApp.engineNote?.let { " - $it" } ?: "")
+                                    } else {
+                                        "Failed: " + (SoulStreamApp.engineError ?: "unknown")
+                                    }
+                                } catch (e: Throwable) {
+                                    "Failed: ${e.message}"
+                                }
+                            }
+                            engineReady = SoulStreamApp.engineReady
+                            engineErr = SoulStreamApp.engineError
+                            updateMsg = res
+                            updating = false
+                        }
+                    }
+                    GhostButton(
+                        text = "Refresh",
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.Refresh,
+                        accent = accentB
+                    ) {
+                        engineReady = SoulStreamApp.engineReady
+                        engineErr = SoulStreamApp.engineError
+                        dlErr = Diag.lastDownloadError(ctx)
+                    }
+                }
+                updateMsg?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = accentA, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 30) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentB) {
+                SectionLabel("Diagnostics report", accentB)
+                Text(
+                    "If something fails, copy this and send it - it lists the exact reason.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted
+                )
+                Spacer(Modifier.height(10.dp))
+                GlowButton(
+                    text = "COPY REPORT",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.SystemUpdateAlt,
+                    accentA = accentA,
+                    accentB = accentB
+                ) {
+                    val txt = Diag.snapshot(ctx)
+                    try {
+                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("SoulStream diagnostics", txt))
+                        Toast.makeText(ctx, "Report copied - paste it in the chat", Toast.LENGTH_LONG).show()
+                    } catch (e: Throwable) {
+                        Toast.makeText(ctx, "Could not copy", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GhostButton(
+                        text = "Share",
+                        modifier = Modifier.weight(1f),
+                        accent = accentA
+                    ) {
+                        try {
+                            val i = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "SoulStream diagnostics")
+                                putExtra(Intent.EXTRA_TEXT, Diag.snapshot(ctx))
+                            }
+                            ctx.startActivity(Intent.createChooser(i, "Send diagnostics"))
+                        } catch (e: Throwable) {
+                            Toast.makeText(ctx, "Could not share", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    GhostButton(
+                        text = "Clear log",
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.DeleteSweep,
+                        accent = accentB
+                    ) {
+                        Diag.clearAll(ctx)
+                        dlErr = null
+                        Toast.makeText(ctx, "Diagnostics cleared", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 60) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
                 SectionLabel("Neon skin", accentA)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -118,7 +268,7 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 40) {
+        PopIn(delayMillis = 90) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
                 SectionLabel("Download power", accentA)
                 Text("Default quality", style = MaterialTheme.typography.titleMedium, color = OnDark)
@@ -167,7 +317,7 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 80) {
+        PopIn(delayMillis = 120) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentB) {
                 SectionLabel("Browser", accentB)
                 ToggleRow(
@@ -199,6 +349,16 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
                 }
                 Spacer(Modifier.height(6.dp))
                 GhostButton(
+                    text = "Reset browser (clear logins + cache)",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.Refresh,
+                    accent = accentB
+                ) {
+                    Engine.resetBrowserData(ctx)
+                    Toast.makeText(ctx, "Browser data cleared - reopen the browser", Toast.LENGTH_LONG).show()
+                }
+                Spacer(Modifier.height(8.dp))
+                GhostButton(
                     text = "Log out everywhere",
                     modifier = Modifier.fillMaxWidth(),
                     icon = Icons.Rounded.Logout,
@@ -212,9 +372,9 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 120) {
+        PopIn(delayMillis = 150) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
-                SectionLabel("Engine", accentA)
+                SectionLabel("Engine update", accentA)
                 Text(
                     "yt-dlp refreshes itself daily. Force an update if a site stops working.",
                     style = MaterialTheme.typography.bodySmall,
@@ -236,12 +396,14 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
                             try {
                                 YoutubeDL.getInstance()
                                     .updateYoutubeDL(ctx, YoutubeDL.UpdateChannel.STABLE)
+                                Prefs.setEngineUpdatedAt(ctx, System.currentTimeMillis())
                                 "Engine updated"
-                            } catch (e: Exception) {
+                            } catch (e: Throwable) {
                                 "Update failed: ${e.message}"
                             }
                         }
                         updateMsg = res
+                        engineReady = SoulStreamApp.engineReady
                         updating = false
                     }
                 }
@@ -254,7 +416,7 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 160) {
+        PopIn(delayMillis = 180) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
                 SectionLabel("Storage", accentA)
                 Text(
@@ -277,10 +439,14 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 200) {
+        PopIn(delayMillis = 210) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentB) {
                 SectionLabel("About", accentB)
-                Text("SoulStream v2.0", style = MaterialTheme.typography.titleMedium, color = OnDark)
+                Text(
+                    "SoulStream v" + AppInfo.VERSION,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OnDark
+                )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "yt-dlp + ffmpeg + aria2c engine. Personal use of your own content only.",
