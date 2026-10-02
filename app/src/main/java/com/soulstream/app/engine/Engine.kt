@@ -34,6 +34,55 @@ object Engine {
     fun qualityLabel(index: Int): String =
         QUALITIES.firstOrNull { it.index == index }?.title ?: QUALITIES[0].title
 
+    private val IMAGE_EXT = listOf(
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".avif"
+    )
+
+    /** Quick, offline guess: does the link point straight at an image file? */
+    fun looksLikeImageUrl(url: String): Boolean {
+        val path = try {
+            android.net.Uri.parse(url).path?.lowercase()
+        } catch (e: Exception) {
+            null
+        } ?: url.lowercase()
+        return IMAGE_EXT.any { path.endsWith(it) }
+    }
+
+    /**
+     * Ask the server what the link actually is (HEAD request, follows
+     * redirects). Returns true when the content type is an image. Never throws;
+     * on any doubt it returns false so normal video/audio handling still runs.
+     * Call this OFF the main thread.
+     */
+    fun probeIsImage(url: String, cookie: String? = null): Boolean {
+        var conn: java.net.HttpURLConnection? = null
+        return try {
+            conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "HEAD"
+                connectTimeout = 8000
+                readTimeout = 8000
+                instanceFollowRedirects = true
+                setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"
+                )
+                if (!cookie.isNullOrBlank()) setRequestProperty("Cookie", cookie)
+            }
+            conn.connect()
+            val type = conn.contentType?.substringBefore(";")?.trim()?.lowercase()
+            type != null && type.startsWith("image")
+        } catch (e: Throwable) {
+            false
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (e: Throwable) {
+                // ignore
+            }
+        }
+    }
+
     /**
      * Exports WebView cookies (from logins made in the in-app browser) into a
      * Netscape cookie file that yt-dlp reads via --cookies. This is what makes

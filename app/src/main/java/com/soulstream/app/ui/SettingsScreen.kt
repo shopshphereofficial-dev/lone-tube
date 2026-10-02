@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -453,6 +454,52 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted
                 )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 240) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
+                SectionLabel("More", accentA)
+                GhostButton(
+                    text = "Share SoulStream",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.Share,
+                    accent = accentA
+                ) {
+                    try {
+                        val i = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "SoulStream - media downloader: " +
+                                    "https://github.com/shopshphereofficial-dev/soulstream"
+                            )
+                        }
+                        ctx.startActivity(Intent.createChooser(i, "Share SoulStream"))
+                    } catch (e: Throwable) {
+                        Toast.makeText(ctx, "Could not share", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                GhostButton(
+                    text = "Send feedback",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.Share,
+                    accent = accentB
+                ) {
+                    try {
+                        val i = Intent(Intent.ACTION_SENDTO).apply {
+                            data = android.net.Uri.parse("mailto:")
+                            putExtra(Intent.EXTRA_SUBJECT, "SoulStream feedback")
+                            putExtra(Intent.EXTRA_TEXT, Diag.snapshot(ctx))
+                        }
+                        ctx.startActivity(i)
+                    } catch (e: Throwable) {
+                        Toast.makeText(ctx, "No mail app found", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
 

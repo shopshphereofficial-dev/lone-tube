@@ -3,6 +3,7 @@ package com.soulstream.app.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -78,6 +79,7 @@ import com.soulstream.app.data.LiveDownloads
 import com.soulstream.app.data.Prefs
 import com.soulstream.app.engine.AdBlock
 import com.soulstream.app.engine.Engine
+import com.soulstream.app.engine.ImageSaver
 import com.soulstream.app.ui.components.AnimatedCounter
 import com.soulstream.app.ui.components.GhostButton
 import com.soulstream.app.ui.components.GlowButton
@@ -352,8 +354,20 @@ fun HomeScreen(
                         val input = url.trim()
                         when {
                             input.isEmpty() -> toast(ctx, "Paste a link first")
-                            input.startsWith("http") -> {
-                                if (Prefs.askQuality(ctx)) {
+                            input.startsWith("http") -> scope.launch {
+                                val isImg = withContext(Dispatchers.IO) {
+                                    Engine.looksLikeImageUrl(input) ||
+                                        Engine.probeIsImage(
+                                            input,
+                                            CookieManager.getInstance().getCookie(input)
+                                        )
+                                }
+                                if (isImg) {
+                                    val msg = withContext(Dispatchers.IO) {
+                                        ImageSaver.save(ctx, input)
+                                    }
+                                    Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                                } else if (Prefs.askQuality(ctx)) {
                                     pendingUrl = input
                                     showSheet = true
                                 } else {
@@ -385,8 +399,27 @@ fun HomeScreen(
                 Engine.QUALITIES.forEach { q ->
                     QuickChip(q.title, q.isAudio, accentA, accentB) {
                         val input = url.trim()
-                        if (input.startsWith("http")) onStartDownload(input, q.index)
-                        else toast(ctx, "Paste a link first")
+                        if (input.startsWith("http")) {
+                            scope.launch {
+                                val isImg = withContext(Dispatchers.IO) {
+                                    Engine.looksLikeImageUrl(input) ||
+                                        Engine.probeIsImage(
+                                            input,
+                                            CookieManager.getInstance().getCookie(input)
+                                        )
+                                }
+                                if (isImg) {
+                                    val msg = withContext(Dispatchers.IO) {
+                                        ImageSaver.save(ctx, input)
+                                    }
+                                    Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onStartDownload(input, q.index)
+                                }
+                            }
+                        } else {
+                            toast(ctx, "Paste a link first")
+                        }
                     }
                 }
             }

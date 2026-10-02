@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.4.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.5.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.4.apk
+          path: SoulStream-v2.5.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.4 > /dev/null 2>&1; then
-            gh release upload v2.4 SoulStream-v2.4.apk --clobber
+          if gh release view v2.5 > /dev/null 2>&1; then
+            gh release upload v2.5 SoulStream-v2.5.apk --clobber
           else
-            gh release create v2.4 SoulStream-v2.4.apk \
-              --title "SoulStream v2.4" \
-              --notes "Engine fix. The APK now ships the yt-dlp/ffmpeg/aria2c native binaries for every ABI (arm64-v8a, armeabi-v7a, x86, x86_64) instead of arm64 only, and the release build is no longer minified - R8 was breaking the engine's reflection-based class loading, which is why the engine could fail to load in the installed (release) build. extractNativeLibs is pinned true so the engine binaries are always unpacked. Version shown in Settings now matches the build."
+            gh release create v2.5 SoulStream-v2.5.apk \
+              --title "SoulStream v2.5" \
+              --notes "Browser fixed: pages now render (the WebView gets its own slot instead of sitting under a full-screen Compose overlay, and uses a real Chrome user-agent). Stronger ad blocking - bigger host list, pop-up/new-window blocking, and DOM ad-removal. In-app ad-free YouTube: auto-skips and hides ads, plus an AD-FREE chip to open the current video on a mirror. Image links are now detected and saved to the gallery instead of showing video/audio formats and failing. Adds Share/Feedback in Settings."
           fi
