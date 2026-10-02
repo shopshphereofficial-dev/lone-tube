@@ -32,26 +32,29 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Restore signing key
+        run: base64 -d keystore.b64 > app/lonetube.p12
+
+      - name: Build release APK (R8 minified)
+        run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk LoneTube-v1.0.apk
+        run: cp app/build/outputs/apk/release/app-release.apk LoneTube-v1.1.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: LoneTube-apk
-          path: LoneTube-v1.0.apk
+          path: LoneTube-v1.1.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v1.0 > /dev/null 2>&1; then
-            gh release upload v1.0 LoneTube-v1.0.apk --clobber
+          if gh release view v1.1 > /dev/null 2>&1; then
+            gh release upload v1.1 LoneTube-v1.1.apk --clobber
           else
-            gh release create v1.0 LoneTube-v1.0.apk \
-              --title "LoneTube v1.0" \
-              --notes "Premium media downloader powered by yt-dlp. YouTube, Instagram, Facebook and 1000+ sites in original quality. Turbo downloads (aria2c), quality picker, in-app browser with login, downloads library, animated premium UI. Personal use of your own content only."
+            gh release create v1.1 LoneTube-v1.1.apk \
+              --title "LoneTube v1.1" \
+              --notes "Smaller (R8-minified), WhatsApp status saver, SnapTube-style Google browser and Aloha-style video detection on any website."
           fi
