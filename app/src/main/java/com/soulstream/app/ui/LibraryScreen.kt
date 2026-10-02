@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.soulstream.app.PlayActivity
 import com.soulstream.app.data.History
 import com.soulstream.app.ui.components.GhostButton
 import com.soulstream.app.ui.components.PopIn
@@ -292,12 +293,21 @@ private fun PlayBadge(tint: Color, isAudio: Boolean, onOpen: () -> Unit) {
 }
 
 private fun open(ctx: Context, item: History.Item) {
+    val playable = item.mime.startsWith("video") || item.mime.startsWith("audio")
     try {
-        ctx.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(Uri.parse(item.uri), item.mime)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        if (playable) {
+            ctx.startActivity(
+                Intent(ctx, PlayActivity::class.java)
+                    .putExtra("uri", item.uri)
+                    .putExtra("title", item.name)
+            )
+        } else {
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(Uri.parse(item.uri), item.mime)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
     } catch (e: Exception) {
         Toast.makeText(ctx, "No app can open this file", Toast.LENGTH_SHORT).show()
     }
