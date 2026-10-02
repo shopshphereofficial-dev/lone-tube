@@ -46,6 +46,8 @@ import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.SystemUpdateAlt
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -89,11 +91,15 @@ import com.soulstream.app.ui.theme.Hairline
 import com.soulstream.app.ui.theme.Muted
 import com.soulstream.app.ui.theme.NeonAmber
 import com.soulstream.app.ui.theme.NeonLime
+import com.soulstream.app.ui.theme.NeonRed
 import com.soulstream.app.ui.theme.OnDark
 import com.soulstream.app.ui.theme.Surface1
 import com.soulstream.app.ui.theme.Surface2
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class Site(val name: String, val glyph: String, val url: String)
 
@@ -122,8 +128,12 @@ fun HomeScreen(
     onStartDownload: (String, Int) -> Unit
 ) {
     val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
     var engineReady by remember { mutableStateOf(SoulStreamApp.engineReady) }
+    var engineErr by remember { mutableStateOf(SoulStreamApp.engineError) }
+    var engineNote by remember { mutableStateOf(SoulStreamApp.engineNote) }
+    var fixing by remember { mutableStateOf(false) }
     var showSheet by remember { mutableStateOf(false) }
     var pendingUrl by remember { mutableStateOf("") }
     var jobs by remember { mutableStateOf<List<ActiveJob>>(emptyList()) }
@@ -136,9 +146,16 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         appear.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
-        while (!engineReady) {
+    }
+    LaunchedEffect(Unit) {
+        var ticks = 0
+        while (ticks < 240) {
             engineReady = SoulStreamApp.engineReady
-            if (!engineReady) delay(400)
+            engineErr = SoulStreamApp.engineError
+            engineNote = SoulStreamApp.engineNote
+            if (engineReady && engineErr == null) break
+            ticks++
+            delay(500)
         }
     }
     LaunchedEffect(Unit) {
@@ -184,7 +201,64 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(12.dp))
-            EngineChip(engineReady, accentA)
+            EngineChip(
+                ready = engineReady,
+                error = engineErr,
+                fixing = fixing,
+                accent = accentA
+            ) {
+                if (fixing) return@EngineChip
+                fixing = true
+                scope.launch {
+                    val res = withContext(Dispatchers.IO) {
+                        try {
+                            SoulStreamApp.initEngine(ctx, force = true)
+                            if (SoulStreamApp.engineReady) {
+                                "Engine ready" + (SoulStreamApp.engineNote?.let { " - $it" } ?: "")
+                            } else {
+                                "Failed: " + (SoulStreamApp.engineError ?: "unknown")
+                            }
+                        } catch (e: Throwable) {
+                            "Failed: ${e.message}"
+                        }
+                    }
+                    engineReady = SoulStreamApp.engineReady
+                    engineErr = SoulStreamApp.engineError
+                    engineNote = SoulStreamApp.engineNote
+                    fixing = false
+                    Toast.makeText(ctx, res, Toast.LENGTH_LONG).show()
+                }
+            }
+
+            if (!engineReady && engineErr != null) {
+                Spacer(Modifier.height(10.dp))
+                PopIn {
+                    NeonCard(Modifier.fillMaxWidth(), accent = NeonRed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Rounded.Warning,
+                                contentDescription = null,
+                                tint = NeonRed,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Downloads can't start",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = OnDark
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(engineErr ?: "", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Tap REPAIR above, or open Settings - Diagnostics and send the report.",
+                            color = Muted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
 
             clipLink?.let { link ->
                 Spacer(Modifier.height(12.dp))
@@ -269,10 +343,9 @@ fun HomeScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     GlowButton(
-                        text = if (engineReady) "DOWNLOAD NOW" else "WAKING UP...",
+                        text = "DOWNLOAD NOW",
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Rounded.Download,
-                        enabled = engineReady,
                         accentA = accentA,
                         accentB = accentB
                     ) {
@@ -291,6 +364,14 @@ fun HomeScreen(
                                 "https://www.youtube.com/results?search_query=" + Uri.encode(input)
                             )
                         }
+                    }
+                    if (!engineReady) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "The engine is still starting - your download waits for it automatically.",
+                            color = Muted,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
@@ -427,22 +508,50 @@ private fun HeroLogo(accentA: Color, accentB: Color) {
 }
 
 @Composable
-private fun EngineChip(ready: Boolean, accent: Color) {
+private fun EngineChip(
+    ready: Boolean,
+    error: String?,
+    fixing: Boolean,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    val tint = when {
+        fixing -> NeonAmber
+        ready && error == null -> NeonLime
+        error != null -> NeonRed
+        else -> NeonAmber
+    }
+    val label = when {
+        fixing -> "REPAIRING ENGINE..."
+        ready && error == null -> "ENGINE ONLINE - TURBO MODE"
+        error != null -> "ENGINE ERROR - TAP TO REPAIR"
+        else -> "WARMING UP THE ENGINE..."
+    }
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
             .background(Surface1.copy(alpha = 0.8f))
-            .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(50))
+            .border(1.dp, tint.copy(alpha = 0.45f), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PulseDot(if (ready) NeonLime else NeonAmber)
+        PulseDot(tint)
         Spacer(Modifier.width(8.dp))
         Text(
-            if (ready) "ENGINE ONLINE - TURBO MODE" else "BOOTING ENGINE...",
-            color = if (ready) OnDark else Muted,
+            label,
+            color = if (ready && error == null) OnDark else tint,
             style = MaterialTheme.typography.labelSmall
         )
+        if (error != null) {
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                Icons.Rounded.SystemUpdateAlt,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(14.dp)
+            )
+        }
     }
 }
 
@@ -489,22 +598,34 @@ private fun LiveJobCard(job: ActiveJob, accentA: Color, accentB: Color) {
         Modifier
             .fillMaxWidth()
             .padding(bottom = 10.dp),
-        accent = accentA
+        accent = if (job.status == ActiveJob.Status.FAILED) NeonRed else accentA
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            NeonRing(progress = job.progress / 100f, accentA = accentA, accentB = accentB)
-            Spacer(Modifier.width(14.dp))
+            if (job.status == ActiveJob.Status.FAILED) {
+                Icon(
+                    Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = NeonRed,
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.width(14.dp))
+            } else {
+                NeonRing(progress = job.progress / 100f, accentA = accentA, accentB = accentB)
+                Spacer(Modifier.width(14.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     job.title,
                     color = OnDark,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(4.dp))
-                if (job.status == ActiveJob.Status.PREPARING) {
-                    Text("Scanning the source...", color = accentA, style = MaterialTheme.typography.bodySmall)
+                if (job.status == ActiveJob.Status.FAILED) {
+                    Text("Download failed - check Settings > Diagnostics", color = NeonRed, style = MaterialTheme.typography.bodySmall)
+                } else if (job.status == ActiveJob.Status.PREPARING) {
+                    Text("Warming up the engine...", color = accentA, style = MaterialTheme.typography.bodySmall)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AnimatedCounter(value = job.progress, color = accentA)
@@ -529,7 +650,7 @@ private fun FinishedRow(job: ActiveJob, accent: Color) {
         Icon(
             imageVector = if (ok) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
             contentDescription = null,
-            tint = if (ok) NeonLime else MaterialTheme.colorScheme.error,
+            tint = if (ok) NeonLime else NeonRed,
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(10.dp))
