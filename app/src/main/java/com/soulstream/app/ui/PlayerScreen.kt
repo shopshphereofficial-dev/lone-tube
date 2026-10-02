@@ -1,26 +1,18 @@
 package com.soulstream.app.ui
 
-import android.net.Uri
-import android.widget.VideoView
-import androidx.compose.animation.AnimatedVisibility
+import android.content.Intent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,12 +26,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,7 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import com.soulstream.app.PlayActivity
 import com.soulstream.app.data.History
 import com.soulstream.app.ui.components.PopIn
 import com.soulstream.app.ui.theme.Hairline
@@ -68,24 +57,17 @@ import com.soulstream.app.ui.theme.Muted
 import com.soulstream.app.ui.theme.OnDark
 import com.soulstream.app.ui.theme.Surface1
 
-/** Play what you downloaded - no need to leave the app. */
+/** Play what you downloaded - opens the full-screen player. */
 @Composable
 fun PlayerScreen() {
     val ctx = LocalContext.current
     val accentA = MaterialTheme.colorScheme.primary
     val accentB = MaterialTheme.colorScheme.secondary
     var all by remember { mutableStateOf(History.list(ctx)) }
-    var playing by remember { mutableStateOf<History.Item?>(null) }
 
     LaunchedEffect(Unit) { all = History.list(ctx) }
 
     val media = all.filter { it.mime.startsWith("video") || it.mime.startsWith("audio") }
-
-    val current = playing
-    if (current != null) {
-        FullPlayer(current, accentA, accentB) { playing = null }
-        return
-    }
 
     Column(
         Modifier
@@ -142,7 +124,17 @@ fun PlayerScreen() {
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(media, key = { it.uri }) { item ->
-                    PlayerTile(item, accentA, accentB) { playing = item }
+                    PlayerTile(item, accentA, accentB) {
+                        try {
+                            ctx.startActivity(
+                                Intent(ctx, PlayActivity::class.java)
+                                    .putExtra("uri", item.uri)
+                                    .putExtra("title", item.name)
+                            )
+                        } catch (e: Exception) {
+                            // nothing we can do
+                        }
+                    }
                 }
             }
         }
@@ -209,111 +201,5 @@ private fun PlayerTile(
                 overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-@Composable
-private fun FullPlayer(
-    item: History.Item,
-    accentA: Color,
-    accentB: Color,
-    onBack: () -> Unit
-) {
-    var isPlaying by remember { mutableStateOf(true) }
-    var videoView by remember { mutableStateOf<VideoView?>(null) }
-    var controlsVisible by remember { mutableStateOf(true) }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .clickable { controlsVisible = !controlsVisible }
-    ) {
-        AndroidView(
-            factory = { c ->
-                VideoView(c).apply {
-                    setVideoURI(Uri.parse(item.uri))
-                    setOnPreparedListener {
-                        it.isLooping = true
-                        start()
-                        isPlaying = true
-                    }
-                    videoView = this
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { }
-        )
-
-        AnimatedVisibility(
-            visible = controlsVisible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(240)) { -it / 8 },
-            exit = fadeOut(tween(180))
-        ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = OnDark)
-                    }
-                    Text(
-                        item.name,
-                        color = OnDark,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BigPlayButton(isPlaying, accentA, accentB) {
-                        val vv = videoView
-                        if (vv != null) {
-                            if (vv.isPlaying) {
-                                vv.pause()
-                                isPlaying = false
-                            } else {
-                                vv.start()
-                                isPlaying = true
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun BigPlayButton(isPlaying: Boolean, accentA: Color, accentB: Color, onClick: () -> Unit) {
-    val scale by animateFloatAsState(
-        targetValue = if (isPlaying) 1f else 1.12f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = 500f),
-        label = "bigplay"
-    )
-    Box(
-        Modifier
-            .size(78.dp)
-            .scale(scale)
-            .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(accentA, accentB)))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-            contentDescription = null,
-            tint = Color(0xFF03060E),
-            modifier = Modifier.size(40.dp)
-        )
     }
 }
