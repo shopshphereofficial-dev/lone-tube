@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
@@ -75,6 +76,7 @@ private val TABS = listOf(
     NavTab("Vault", Icons.Rounded.Star),
     NavTab("Library", Icons.Rounded.Folder),
     NavTab("Play", Icons.Rounded.PlayArrow),
+    NavTab("Tools", Icons.Rounded.Bolt),
     NavTab("Settings", Icons.Rounded.Settings)
 )
 
@@ -125,6 +127,7 @@ fun AppRoot(
                     1 -> StatusScreen()
                     2 -> LibraryScreen()
                     3 -> PlayerScreen()
+                    4 -> ToolsScreen()
                     else -> SettingsScreen(accentIndex = accentIndex, onAccentChange = onAccentChange)
                 }
             }
@@ -190,7 +193,7 @@ private fun BottomBar(
             .fillMaxWidth()
             .background(Surface1.copy(alpha = 0.95f))
             .border(1.dp, accentA.copy(alpha = 0.18f), RoundedCornerShape(0.dp))
-            .padding(horizontal = 4.dp, vertical = 8.dp),
+            .padding(horizontal = 2.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -239,7 +242,7 @@ private fun BarItem(
                 if (selected) accentA.copy(alpha = 0.16f) else Color.Transparent
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+            .padding(horizontal = 6.dp, vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -259,7 +262,7 @@ private fun BarItem(
                 imageVector = icon,
                 contentDescription = label,
                 tint = if (selected) accentA else Muted,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(21.dp)
             )
         }
         Spacer(Modifier.height(2.dp))
