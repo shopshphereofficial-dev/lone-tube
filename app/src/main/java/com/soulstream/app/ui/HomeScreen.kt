@@ -102,14 +102,18 @@ private val SITES = listOf(
     Site("Instagram", "\u25CE", "https://www.instagram.com"),
     Site("Facebook", "f", "https://m.facebook.com"),
     Site("TikTok", "\u266A", "https://www.tiktok.com"),
+    Site("Kwai", "K", "https://www.kwai.com"),
     Site("X", "\u2715", "https://x.com"),
+    Site("Threads", "@", "https://www.threads.net"),
     Site("Pinterest", "P", "https://www.pinterest.com"),
     Site("Reddit", "R", "https://www.reddit.com"),
     Site("Snapchat", "\u25D5", "https://www.snapchat.com"),
     Site("SoundCloud", "\u2601", "https://soundcloud.com"),
     Site("DailyMotion", "D", "https://www.dailymotion.com"),
     Site("Twitch", "T", "https://m.twitch.tv"),
-    Site("Vimeo", "V", "https://vimeo.com")
+    Site("Vimeo", "V", "https://vimeo.com"),
+    Site("Bluesky", "\u2609", "https://bsky.app"),
+    Site("OK.ru", "OK", "https://m.ok.ru")
 )
 
 @Composable
@@ -354,7 +358,7 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(20.dp))
-            SectionLabel("Jump to", accentA)
+            SectionLabel("All apps", accentA)
             SITES.chunked(4).forEachIndexed { rowIndex, row ->
                 PopIn(delayMillis = rowIndex * 30) {
                     Row(
