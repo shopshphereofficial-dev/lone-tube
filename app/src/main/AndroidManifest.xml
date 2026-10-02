@@ -7,8 +7,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- WhatsApp status saver: reads the app's own status folders directly -->
+    <!-- WhatsApp status saver: reads WhatsApp's own status folders -->
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
@@ -17,18 +18,20 @@
         android:maxSdkVersion="32" />
 
     <application
-        android:name=".LoneTubeApp"
-        android:allowBackup="true"
+        android:name=".SoulStreamApp"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.LoneTube">
+        android:theme="@style/Theme.SoulStream">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -40,7 +43,7 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"
-            android:theme="@style/Theme.LoneTube.Dialog">
+            android:theme="@style/Theme.SoulStream.Dialog">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -50,7 +53,8 @@
 
         <activity
             android:name=".BrowserActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <service
             android:name=".service.DownloadService"
@@ -59,7 +63,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.lonetube.app.fileprovider"
+            android:authorities="com.soulstream.app.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
