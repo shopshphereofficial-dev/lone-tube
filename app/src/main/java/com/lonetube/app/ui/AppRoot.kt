@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,6 +52,7 @@ private data class NavTab(val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
     NavTab("Home", Icons.Rounded.Home),
+    NavTab("Statuses", Icons.Rounded.Star),
     NavTab("Library", Icons.Rounded.Folder),
     NavTab("Settings", Icons.Rounded.Settings)
 )
@@ -79,7 +81,8 @@ fun AppRoot(
             ) { t ->
                 when (t) {
                     0 -> HomeScreen(onOpenBrowser = onOpenBrowser, onStartDownload = onStartDownload)
-                    1 -> LibraryScreen()
+                    1 -> StatusScreen()
+                    2 -> LibraryScreen()
                     else -> SettingsScreen()
                 }
             }
@@ -94,7 +97,7 @@ private fun BottomBar(current: Int, onSelect: (Int) -> Unit) {
         Modifier
             .fillMaxWidth()
             .background(Surface1.copy(alpha = 0.92f))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -126,7 +129,7 @@ private fun BarItem(
             .clip(RoundedCornerShape(16.dp))
             .background(if (selected) Violet.copy(alpha = 0.18f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
