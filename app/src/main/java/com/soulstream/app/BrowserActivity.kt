@@ -138,7 +138,7 @@ class BrowserActivity : ComponentActivity() {
     private var pageTitle by mutableStateOf("")
     private var pageUrl by mutableStateOf(HOME_URL)
     private var loading by mutableStateOf(true)
-    private var progress by mutableStateOf(0f)
+    private var pageProgress by mutableStateOf(0f)
     private var blocked by mutableStateOf(true)
     private var videos by mutableStateOf<List<String>>(emptyList())
     private var images by mutableStateOf<List<String>>(emptyList())
@@ -261,7 +261,7 @@ class BrowserActivity : ComponentActivity() {
             }
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    progress = newProgress / 100f
+                    pageProgress = newProgress / 100f
                     loading = newProgress < 100
                 }
             }
@@ -430,7 +430,7 @@ class BrowserActivity : ComponentActivity() {
 
                     if (loading) {
                         LinearProgressIndicator(
-                            progress = { progress },
+                            progress = { pageProgress },
                             modifier = Modifier.fillMaxWidth(),
                             color = accentA,
                             trackColor = Surface2

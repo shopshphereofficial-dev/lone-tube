@@ -59,7 +59,7 @@ import com.soulstream.app.ui.theme.SoulTheme
  */
 class PlayActivity : ComponentActivity() {
 
-    private var isPlaying by mutableStateOf(true)
+    private var playing by mutableStateOf(true)
     private var controlsVisible by mutableStateOf(true)
     private var videoView: VideoView? = null
 
@@ -84,7 +84,7 @@ class PlayActivity : ComponentActivity() {
             setOnPreparedListener {
                 it.isLooping = true
                 start()
-                isPlaying = true
+                playing = true
             }
             setOnErrorListener { _, _, _ -> true }
             videoView = this
@@ -148,15 +148,15 @@ class PlayActivity : ComponentActivity() {
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        BigPlayButton(isPlaying, accentA, accentB) {
+                        BigPlayButton(playing, accentA, accentB) {
                             val vv = videoView
                             if (vv != null) {
                                 if (vv.isPlaying) {
                                     vv.pause()
-                                    isPlaying = false
+                                    playing = false
                                 } else {
                                     vv.start()
-                                    isPlaying = true
+                                    playing = true
                                 }
                             }
                         }
