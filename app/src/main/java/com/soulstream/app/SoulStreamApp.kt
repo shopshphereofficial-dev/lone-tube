@@ -65,6 +65,28 @@ class SoulStreamApp : Application() {
         private val lock = Object()
 
         /**
+         * The library wraps the real failure (e.g. a missing native library or a
+         * resource that could not be unpacked) inside a generic "failed to
+         * initialize" YoutubeDLException. Walking the cause chain turns the
+         * unhelpful top-level message into the actual reason, which is what the
+         * UI and the diagnostics report show.
+         */
+        private fun describe(e: Throwable): String {
+            val sb = StringBuilder()
+            var t: Throwable? = e
+            var depth = 0
+            while (t != null && depth < 6) {
+                if (depth > 0) sb.append("  <-  ")
+                sb.append(t.javaClass.simpleName)
+                val m = t.message
+                if (!m.isNullOrBlank()) sb.append(": ").append(m)
+                t = t.cause
+                depth++
+            }
+            return sb.toString()
+        }
+
+        /**
          * Initialises Python + ffmpeg + aria2c and makes sure yt-dlp itself is
          * present (the library does NOT ship yt-dlp - it is fetched once and
          * then refreshed daily). Never throws; records why on failure.
@@ -82,7 +104,7 @@ class SoulStreamApp : Application() {
                     Diag.log(ctx, "engine", "init ok")
                 } catch (e: Throwable) {
                     engineReady = false
-                    engineError = (e.message ?: e.javaClass.simpleName)
+                    engineError = describe(e)
                     Diag.log(ctx, "engine", "init FAILED: $engineError")
                     return
                 }

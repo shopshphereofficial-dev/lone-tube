@@ -11,11 +11,16 @@ android {
         applicationId "com.soulstream.app"
         minSdk 26
         targetSdk 34
-        versionCode 4
-        versionName "2.3"
+        versionCode 5
+        versionName "2.4"
 
         ndk {
-            abiFilters 'arm64-v8a'
+            // The yt-dlp / ffmpeg / aria2c engine ships native binaries per ABI.
+            // Shipping only one ABI is a top reason the engine "fails to load":
+            // on any device whose ABI is not listed here the native libraries are
+            // missing and init throws "failed to initialize". Include both real
+            // phone ABIs (64-bit + 32-bit) so the engine loads on every handset.
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
     }
 
@@ -41,10 +46,15 @@ android {
 
     buildTypes {
         release {
-            // Shrink hard (that is where the 50+ MB of dead code went) but keep
-            // class names intact - no obfuscation, so nothing can break at runtime.
-            minifyEnabled true
-            shrinkResources true
+            // Minification/R8 is OFF on purpose. The yt-dlp engine reaches its
+            // Java/Kotlin classes through reflection (Jackson parses video info,
+            // the mapper classes are instantiated dynamically), and R8 silently
+            // breaks exactly that - the classic "works in debug, engine fails in
+            // release" failure. The APK size is dominated by the ~57 MB of native
+            // binaries, so keeping the dex unshrunk costs only a few MB and buys
+            // a release build that behaves identically to debug.
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.getByName("release")
         }

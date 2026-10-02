@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.3.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.4.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.3.apk
+          path: SoulStream-v2.4.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.3 > /dev/null 2>&1; then
-            gh release upload v2.3 SoulStream-v2.3.apk --clobber
+          if gh release view v2.4 > /dev/null 2>&1; then
+            gh release upload v2.4 SoulStream-v2.4.apk --clobber
           else
-            gh release create v2.3 SoulStream-v2.3.apk \
-              --title "SoulStream v2.3" \
-              --notes "Downloads no longer depend on the aria2c turbo engine alone: if that pass fails the download is retried with yt-dlp's own downloader. minSdk lowered to Android 8 so it installs on older phones. Everything from v2.2: engine errors shown with one-tap repair, diagnostics report, browser retry + Open in Chrome."
+            gh release create v2.4 SoulStream-v2.4.apk \
+              --title "SoulStream v2.4" \
+              --notes "Engine fix. The APK now ships the yt-dlp/ffmpeg/aria2c native binaries for every ABI (arm64-v8a, armeabi-v7a, x86, x86_64) instead of arm64 only, and the release build is no longer minified - R8 was breaking the engine's reflection-based class loading, which is why the engine could fail to load in the installed (release) build. extractNativeLibs is pinned true so the engine binaries are always unpacked. Version shown in Settings now matches the build."
           fi
