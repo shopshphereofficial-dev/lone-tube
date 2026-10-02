@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.0.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.1.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.0.apk
+          path: SoulStream-v2.1.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.0 > /dev/null 2>&1; then
-            gh release upload v2.0 SoulStream-v2.0.apk --clobber
+          if gh release view v2.1 > /dev/null 2>&1; then
+            gh release upload v2.1 SoulStream-v2.1.apk --clobber
           else
-            gh release create v2.0 SoulStream-v2.0.apk \
-              --title "SoulStream v2.0" \
-              --notes "Gamer-grade rebuild: neon animated UI, ad-free browser, WhatsApp status vault, in-app player, image grabbing, persistent logins."
+            gh release create v2.1 SoulStream-v2.1.apk \
+              --title "SoulStream v2.1" \
+              --notes "Browser page now renders (plain WebView under a Compose overlay), new Toolbox tab (junk clean, large files, WhatsApp clean, trash clean, photos clean, app uninstaller, battery saver), 16 site shortcuts."
           fi
