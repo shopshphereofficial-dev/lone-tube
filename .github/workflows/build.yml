@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.5.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.6.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.5.apk
+          path: SoulStream-v2.6.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.5 > /dev/null 2>&1; then
-            gh release upload v2.5 SoulStream-v2.5.apk --clobber
+          if gh release view v2.6 > /dev/null 2>&1; then
+            gh release upload v2.6 SoulStream-v2.6.apk --clobber
           else
-            gh release create v2.5 SoulStream-v2.5.apk \
-              --title "SoulStream v2.5" \
-              --notes "Browser fixed: pages now render (the WebView gets its own slot instead of sitting under a full-screen Compose overlay, and uses a real Chrome user-agent). Stronger ad blocking - bigger host list, pop-up/new-window blocking, and DOM ad-removal. In-app ad-free YouTube: auto-skips and hides ads, plus an AD-FREE chip to open the current video on a mirror. Image links are now detected and saved to the gallery instead of showing video/audio formats and failing. Adds Share/Feedback in Settings."
+            gh release create v2.6 SoulStream-v2.6.apk \
+              --title "SoulStream v2.6" \
+              --notes "Browser: the big download panel is gone - download is now a small floating button and the media-found chip can be dismissed with X, so the page is never covered. Added an HW/SW render toggle (top bar) and a one-tap render fix for pages that stay blank. Settings now has a Download tools section with WhatsApp status saver and Phone cleaner shortcuts."
           fi

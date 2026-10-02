@@ -128,7 +128,12 @@ fun AppRoot(
                     2 -> LibraryScreen()
                     3 -> PlayerScreen()
                     4 -> ToolsScreen()
-                    else -> SettingsScreen(accentIndex = accentIndex, onAccentChange = onAccentChange)
+                    else -> SettingsScreen(
+                        accentIndex = accentIndex,
+                        onAccentChange = onAccentChange,
+                        onOpenVault = { tab = 1 },
+                        onOpenTools = { tab = 4 }
+                    )
                 }
             }
 

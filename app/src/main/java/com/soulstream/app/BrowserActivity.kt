@@ -162,6 +162,7 @@ class BrowserActivity : ComponentActivity() {
     private var pendingUrl by mutableStateOf("")
     private var pageBlank by mutableStateOf(false)
     private var softwareMode by mutableStateOf(false)
+    private var mediaDismissed by mutableStateOf(false)
 
     private var webView: WebView? = null
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -482,6 +483,15 @@ class BrowserActivity : ComponentActivity() {
                         }) {
                             Icon(Icons.Rounded.Home, contentDescription = "Home", tint = Muted)
                         }
+                        RenderChip(softwareMode, accentA) {
+                            softwareMode = !softwareMode
+                            webView?.setLayerType(
+                                if (softwareMode) View.LAYER_TYPE_SOFTWARE
+                                else View.LAYER_TYPE_HARDWARE,
+                                null
+                            )
+                            webView?.reload()
+                        }
                         Spacer(Modifier.weight(1f))
                         if (AdBlock.isYoutube(pageUrl)) {
                             YtChip(accentA) { load(youtubeMirror(pageUrl)) }
@@ -521,55 +531,52 @@ class BrowserActivity : ComponentActivity() {
                         .fillMaxWidth()
                 )
 
-                // ---------------- bottom bar ----------------
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Surface1.copy(alpha = 0.98f))
-                ) {
-                    if (pageBlank) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp)
-                                .padding(top = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Page didn't paint on this device",
-                                color = NeonAmber,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            GhostButton(text = "Retry", accent = accentA) {
-                                if (!softwareMode) {
-                                    softwareMode = true
-                                    webView?.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                                }
-                                pageBlank = false
-                                webView?.reload()
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            GhostButton(text = "Chrome", accent = accentB) {
-                                Engine.openInSystemBrowser(this@BrowserActivity, pageUrl)
-                            }
+                if (pageBlank) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(NeonAmber.copy(alpha = 0.14f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Page blank? tap Fix for software rendering",
+                            color = NeonAmber,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        GhostButton(text = "Fix", accent = accentA) {
+                            softwareMode = true
+                            webView?.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                            pageBlank = false
+                            webView?.reload()
                         }
                     }
-                    if (videos.isNotEmpty() || images.isNotEmpty()) {
-                        GrabPill(videos.size, images.size, accentA, accentB) { showGrab = true }
-                    }
-                    GlowButton(
-                        text = "DOWNLOAD THIS PAGE",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        icon = Icons.Rounded.Download,
-                        enabled = !loading,
-                        accentA = accentA,
-                        accentB = accentB
-                    ) { pick(pageUrl) }
                 }
             }
+
+            // Floating controls - small, so the page is never covered by a big
+            // "download" panel.
+            if ((videos.isNotEmpty() || images.isNotEmpty()) && !mediaDismissed) {
+                MediaChip(
+                    videoCount = videos.size,
+                    imageCount = images.size,
+                    accentA = accentA,
+                    accentB = accentB,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp, bottom = 84.dp),
+                    onOpen = { showGrab = true },
+                    onClose = { mediaDismissed = true }
+                )
+            }
+            DownloadFab(
+                accentA = accentA,
+                accentB = accentB,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            ) { pick(pageUrl) }
 
             if (showGrab) {
                 GrabSheet(
@@ -659,45 +666,77 @@ private fun AdChip(on: Boolean, accent: Color, onClick: () -> Unit) {
 }
 
 @Composable
-private fun GrabPill(videoCount: Int, imageCount: Int, accentA: Color, accentB: Color, onClick: () -> Unit) {
+private fun MediaChip(
+    videoCount: Int,
+    imageCount: Int,
+    accentA: Color,
+    accentB: Color,
+    modifier: Modifier = Modifier,
+    onOpen: () -> Unit,
+    onClose: () -> Unit
+) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(top = 10.dp)
+        modifier
             .clip(RoundedCornerShape(16.dp))
             .background(
                 Brush.horizontalGradient(
-                    listOf(accentA.copy(alpha = 0.28f), accentB.copy(alpha = 0.24f))
+                    listOf(accentA.copy(alpha = 0.94f), accentB.copy(alpha = 0.94f))
                 )
             )
-            .border(1.dp, accentA.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .clickable(onClick = onOpen)
+            .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(RoundedCornerShape(50))
-                .background(accentA)
-        )
-        Spacer(Modifier.width(10.dp))
+        Icon(Icons.Rounded.Bolt, contentDescription = null, tint = Color(0xFF03060E), modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             buildString {
-                append("$videoCount video")
-                if (videoCount != 1) append("s")
-                if (imageCount > 0) {
-                    append(" + $imageCount image")
-                    if (imageCount != 1) append("s")
-                }
-                append(" found - tap to grab")
+                append("$videoCount v")
+                if (imageCount > 0) append(" + $imageCount img")
+                append(" - grab")
             },
-            color = OnDark,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f)
+            color = Color(0xFF03060E),
+            style = MaterialTheme.typography.labelSmall
         )
-        Icon(Icons.Rounded.Bolt, contentDescription = null, tint = accentA, modifier = Modifier.size(18.dp))
+        IconButton(onClick = onClose, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Rounded.Close, contentDescription = "Hide", tint = Color(0xFF03060E), modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun DownloadFab(
+    accentA: Color,
+    accentB: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.horizontalGradient(listOf(accentA, accentB)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Rounded.Download, contentDescription = null, tint = Color(0xFF03060E), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Download", color = Color(0xFF03060E), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun RenderChip(software: Boolean, accent: Color, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Surface2.copy(alpha = 0.5f))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(if (software) "SW" else "HW", color = accent, style = MaterialTheme.typography.labelSmall)
     }
 }
 

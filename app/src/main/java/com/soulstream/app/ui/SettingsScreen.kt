@@ -76,7 +76,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
+fun SettingsScreen(
+    accentIndex: Int,
+    onAccentChange: (Int) -> Unit,
+    onOpenVault: () -> Unit,
+    onOpenTools: () -> Unit
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val accentA = MaterialTheme.colorScheme.primary
@@ -188,6 +193,27 @@ fun SettingsScreen(accentIndex: Int, onAccentChange: (Int) -> Unit) {
         Spacer(Modifier.height(12.dp))
 
         PopIn(delayMillis = 30) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
+                SectionLabel("Download tools", accentA)
+                GhostButton(
+                    text = "WhatsApp status saver",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.Refresh,
+                    accent = accentA
+                ) { onOpenVault() }
+                Spacer(Modifier.height(8.dp))
+                GhostButton(
+                    text = "Phone cleaner (junk, large files, WhatsApp)",
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Rounded.DeleteSweep,
+                    accent = accentB
+                ) { onOpenTools() }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 60) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentB) {
                 SectionLabel("Diagnostics report", accentB)
                 Text(

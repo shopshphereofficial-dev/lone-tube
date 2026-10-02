@@ -11,8 +11,8 @@ android {
         applicationId "com.soulstream.app"
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName "2.5"
+        versionCode 7
+        versionName "2.6"
 
         ndk {
             // The yt-dlp / ffmpeg / aria2c engine ships native binaries per ABI.
