@@ -307,6 +307,13 @@ object Tools {
 
     data class ApkEntry(val label: String, val pkg: String, val version: String, val size: Long)
 
+    private fun versionOf(pm: android.content.pm.PackageManager, pkg: String): String =
+        try {
+            pm.getPackageInfo(pkg, 0).versionName ?: "-"
+        } catch (e: Exception) {
+            "-"
+        }
+
     fun apkList(ctx: Context): List<ApkEntry> {
         val pm = ctx.packageManager
         val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -314,7 +321,7 @@ object Tools {
             pm.queryIntentActivities(main, 0).mapNotNull { ri ->
                 val ai = ri.activityInfo?.applicationInfo ?: return@mapNotNull null
                 val src = File(ai.sourceDir)
-                ApkEntry(ri.loadLabel(pm).toString(), ai.packageName, ai.versionName ?: "-", src.length())
+                ApkEntry(ri.loadLabel(pm).toString(), ai.packageName, versionOf(pm, ai.packageName), src.length())
             }.distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
         } catch (e: Exception) {
             emptyList()
@@ -329,7 +336,7 @@ object Tools {
             val label = pm.getApplicationLabel(ai).toString().replace(Regex("[^A-Za-z0-9._-]"), "_")
             val dir = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "APKs")
             dir.mkdirs()
-            val out = File(dir, "$label-${ai.versionName ?: "1"}.apk")
+            val out = File(dir, "$label-" + versionOf(pm, pkg) + ".apk")
             src.inputStream().use { i -> out.outputStream().use { o -> i.copyTo(o) } }
             "Saved ${out.name} (" + human(out.length()) + ")"
         } catch (e: Exception) {
