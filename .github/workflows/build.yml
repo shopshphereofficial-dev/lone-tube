@@ -39,22 +39,22 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.6.apk
+        run: cp app/build/outputs/apk/release/app-release.apk SoulStream-v2.7.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SoulStream-apk
-          path: SoulStream-v2.6.apk
+          path: SoulStream-v2.7.apk
 
       - name: Publish release with APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v2.6 > /dev/null 2>&1; then
-            gh release upload v2.6 SoulStream-v2.6.apk --clobber
+          if gh release view v2.7 > /dev/null 2>&1; then
+            gh release upload v2.7 SoulStream-v2.7.apk --clobber
           else
-            gh release create v2.6 SoulStream-v2.6.apk \
-              --title "SoulStream v2.6" \
+            gh release create v2.7 SoulStream-v2.7.apk \
+              --title "SoulStream v2.7" \
               --notes "Browser: the big download panel is gone - download is now a small floating button and the media-found chip can be dismissed with X, so the page is never covered. Added an HW/SW render toggle (top bar) and a one-tap render fix for pages that stay blank. Settings now has a Download tools section with WhatsApp status saver and Phone cleaner shortcuts."
           fi
