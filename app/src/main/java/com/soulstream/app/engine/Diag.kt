@@ -12,8 +12,8 @@ import java.util.Locale
 
 /** Single source of truth for the version shown in the UI. */
 object AppInfo {
-    const val VERSION = "2.7"
-    const val VERSION_CODE = 8
+    const val VERSION = "2.8"
+    const val VERSION_CODE = 9
 }
 
 /**

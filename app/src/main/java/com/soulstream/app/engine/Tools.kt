@@ -263,6 +263,114 @@ object Tools {
         }
     }
 
+    // ---------------- duplicates ----------------
+
+    data class DupGroup(val size: Long, val files: List<File>)
+
+    fun findDuplicates(limit: Int = 40): List<DupGroup> {
+        val bySize = HashMap<Long, MutableList<File>>()
+        for (root in rootFiles()) {
+            walk(root, 5) { f ->
+                if (f.isFile && f.length() > 32 * 1024) {
+                    bySize.getOrPut(f.length()) { ArrayList() }.add(f)
+                }
+            }
+        }
+        val groups = ArrayList<DupGroup>()
+        for ((size, files) in bySize) {
+            if (files.size < 2) continue
+            val byHash = HashMap<String, MutableList<File>>()
+            for (f in files) {
+                val h = headHash(f) ?: continue
+                byHash.getOrPut(h) { ArrayList() }.add(f)
+            }
+            for ((_, dupes) in byHash) {
+                if (dupes.size > 1) groups.add(DupGroup(size, dupes))
+            }
+        }
+        return groups.sortedByDescending { it.size * (it.files.size - 1) }.take(limit)
+    }
+
+    private fun headHash(f: File): String? = try {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        f.inputStream().use { ins ->
+            val buf = ByteArray(256 * 1024)
+            val n = ins.read(buf)
+            if (n > 0) md.update(buf, 0, n)
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        null
+    }
+
+    // ---------------- apk backup ----------------
+
+    data class ApkEntry(val label: String, val pkg: String, val version: String, val size: Long)
+
+    fun apkList(ctx: Context): List<ApkEntry> {
+        val pm = ctx.packageManager
+        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return try {
+            pm.queryIntentActivities(main, 0).mapNotNull { ri ->
+                val ai = ri.activityInfo?.applicationInfo ?: return@mapNotNull null
+                val src = File(ai.sourceDir)
+                ApkEntry(ri.loadLabel(pm).toString(), ai.packageName, ai.versionName ?: "-", src.length())
+            }.distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun backupApk(ctx: Context, pkg: String): String {
+        return try {
+            val pm = ctx.packageManager
+            val ai = pm.getApplicationInfo(pkg, 0)
+            val src = File(ai.sourceDir)
+            val label = pm.getApplicationLabel(ai).toString().replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val dir = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "APKs")
+            dir.mkdirs()
+            val out = File(dir, "$label-${ai.versionName ?: "1"}.apk")
+            src.inputStream().use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+            "Saved ${out.name} (" + human(out.length()) + ")"
+        } catch (e: Exception) {
+            "Backup failed: ${e.message}"
+        }
+    }
+
+    // ---------------- speed test ----------------
+
+    data class SpeedResult(val mbps: Double, val millis: Long)
+
+    fun speedTest(): SpeedResult {
+        val start = System.currentTimeMillis()
+        var read = 0L
+        var conn: java.net.HttpURLConnection? = null
+        try {
+            val url = java.net.URL("https://speed.cloudflare.com/__down?bytes=10000000")
+            conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 25000
+                setRequestProperty("User-Agent", "SoulStream")
+            }
+            conn.connect()
+            conn.inputStream.use { ins ->
+                val buf = ByteArray(64 * 1024)
+                var n = ins.read(buf)
+                while (n > 0) {
+                    read += n
+                    n = ins.read(buf)
+                }
+            }
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (e: Exception) {
+            }
+        }
+        val secs = (System.currentTimeMillis() - start).coerceAtLeast(1) / 1000.0
+        return SpeedResult((read * 8.0 / 1_000_000.0) / secs, (secs * 1000).toLong())
+    }
+
     // ---------------- helpers ----------------
 
     fun human(bytes: Long): String {

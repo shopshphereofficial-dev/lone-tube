@@ -96,6 +96,12 @@ fun ToolsScreen() {
     var battery by remember { mutableStateOf("") }
     var storage by remember { mutableStateOf("") }
     var ram by remember { mutableStateOf("") }
+    var dupes by remember { mutableStateOf<List<Tools.DupGroup>>(emptyList()) }
+    var showDupes by remember { mutableStateOf(false) }
+    var apks by remember { mutableStateOf<List<Tools.ApkEntry>>(emptyList()) }
+    var showApks by remember { mutableStateOf(false) }
+    var speed by remember { mutableStateOf<Tools.SpeedResult?>(null) }
+    var speedBusy by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -485,7 +491,145 @@ fun ToolsScreen() {
 
         Spacer(Modifier.height(12.dp))
 
-        PopIn(delayMillis = 280) {
+        PopIn(delayMillis = 260) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
+                SectionLabel("Duplicate finder", accentA)
+                Text(
+                    if (dupes.isEmpty()) "Find identical photos/files wasting space"
+                    else "${dupes.size} duplicate groups found",
+                    color = OnDark,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GhostButton(
+                        text = if (busy) "Scanning..." else "Scan",
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.Refresh,
+                        accent = accentA
+                    ) {
+                        if (!busy) scope.launch {
+                            busy = true
+                            dupes = withContext(Dispatchers.IO) { Tools.findDuplicates() }
+                            showDupes = true
+                            busy = false
+                        }
+                    }
+                    GhostButton(
+                        text = "Clean extras",
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.DeleteSweep,
+                        accent = accentB
+                    ) {
+                        scope.launch {
+                            val extras = dupes.flatMap { g -> g.files.drop(1) }
+                            val msg = withContext(Dispatchers.IO) { Tools.deleteFiles(extras) }
+                            dupes = withContext(Dispatchers.IO) { Tools.findDuplicates() }
+                            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                AnimatedVisibility(visible = showDupes && dupes.isNotEmpty()) {
+                    Column(Modifier.padding(top = 8.dp)) {
+                        dupes.take(8).forEach { g ->
+                            Text(
+                                "${g.files.size} x " + Tools.human(g.size) +
+                                    "   frees " + Tools.human(g.size * (g.files.size - 1)),
+                                color = Muted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 290) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentB) {
+                SectionLabel("APK backup", accentB)
+                Text(
+                    if (apks.isEmpty()) "Save installed apps as .apk files" else "${apks.size} apps",
+                    color = OnDark,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                GhostButton(
+                    text = if (showApks) "Hide list" else "Show apps",
+                    modifier = Modifier.fillMaxWidth(),
+                    accent = accentB
+                ) {
+                    showApks = !showApks
+                    if (showApks && apks.isEmpty()) {
+                        scope.launch { apks = withContext(Dispatchers.IO) { Tools.apkList(ctx) } }
+                    }
+                }
+                AnimatedVisibility(visible = showApks) {
+                    Column(Modifier.padding(top = 8.dp)) {
+                        apks.take(60).forEach { a ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        scope.launch {
+                                            val msg = withContext(Dispatchers.IO) {
+                                                Tools.backupApk(ctx, a.pkg)
+                                            }
+                                            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    a.label,
+                                    color = OnDark,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text("BACKUP", color = accentB, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 320) {
+            NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
+                SectionLabel("Speed test", accentA)
+                Text(
+                    speed?.let { "%.1f Mbps".format(it.mbps) + "   (" + (it.millis / 1000) + "s)" }
+                        ?: "Check your internet speed",
+                    color = OnDark,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                GlowButton(
+                    text = if (speedBusy) "Testing..." else "RUN SPEED TEST",
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !speedBusy,
+                    accentA = accentA,
+                    accentB = accentB
+                ) {
+                    if (!speedBusy) scope.launch {
+                        speedBusy = true
+                        speed = withContext(Dispatchers.IO) { Tools.speedTest() }
+                        speedBusy = false
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        PopIn(delayMillis = 350) {
             NeonCard(Modifier.fillMaxWidth(), accent = accentA) {
                 SectionLabel("Tip", accentA)
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -28,7 +28,9 @@ object Engine {
         QualityOption(3, "480p", "Lighter file", false),
         QualityOption(4, "360p", "Smallest video", false),
         QualityOption(5, "MP3 - 320 kbps", "Best audio quality", true),
-        QualityOption(6, "MP3 - 128 kbps", "Small audio file", true)
+        QualityOption(6, "MP3 - 128 kbps", "Small audio file", true),
+        QualityOption(7, "Thumbnail only", "Just the cover image (JPG)", false),
+        QualityOption(8, "Full playlist", "Download every video in the playlist", false)
     )
 
     fun qualityLabel(index: Int): String =

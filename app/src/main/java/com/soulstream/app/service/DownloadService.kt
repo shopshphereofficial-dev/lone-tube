@@ -144,17 +144,23 @@ class DownloadService : Service() {
                     throw (failure ?: IllegalStateException("the download failed"))
                 }
 
-                val file = workDir.listFiles()?.firstOrNull { it.isFile }
-                    ?: throw IllegalStateException("the engine finished but produced no file")
-                val mime = mimeFor(file)
-                val size = file.length()
-                val saved = saveResult(file, mime)
-                History.add(this@DownloadService, file.name, size, saved, mime)
+                val files = workDir.listFiles()?.filter { it.isFile } ?: emptyList()
+                if (files.isEmpty()) {
+                    throw IllegalStateException("the engine finished but produced no file")
+                }
+                var totalBytes = 0L
+                files.forEach { f ->
+                    val mime = mimeFor(f)
+                    val saved = saveResult(f, mime)
+                    History.add(this@DownloadService, f.name, f.length(), saved, mime)
+                    totalBytes += f.length()
+                }
                 workDir.deleteRecursively()
-                LiveDownloads.upsert(ActiveJob(jobId, file.name, 100, ActiveJob.Status.DONE))
+                val summary = if (files.size == 1) files[0].name else "${files.size} files"
+                LiveDownloads.upsert(ActiveJob(jobId, summary, 100, ActiveJob.Status.DONE))
                 Diag.clearDownloadError(this)
-                Diag.log(this, "dl", "done ${file.name} ${size / 1024} KB")
-                finishWith(notifId, "Done: ${file.name}", true)
+                Diag.log(this, "dl", "done $summary ${totalBytes / 1024} KB")
+                finishWith(notifId, "Done: $summary", true)
             } catch (e: Throwable) {
                 val msg = e.message ?: lastLine.ifBlank { "unknown error" }
                 val detail = if (lastLine.isBlank()) msg else "$msg  |  ${lastLine.take(220)}"
@@ -207,13 +213,22 @@ class DownloadService : Service() {
                     addOption("--audio-format", "mp3")
                     addOption("--audio-quality", "128K")
                 }
+                7 -> {
+                    addOption("--skip-download")
+                    addOption("--write-thumbnail")
+                    addOption("--convert-thumbnails", "jpg")
+                }
+                8 -> {
+                    addOption("-f", "bv*+ba/b")
+                    addOption("--merge-output-format", "mp4")
+                }
                 else -> {
                     addOption("-f", "bv*+ba/b")
                     addOption("--merge-output-format", "mp4")
                 }
             }
             addOption("-o", workDir.absolutePath + "/%(title)s.%(ext)s")
-            addOption("--no-playlist")
+            if (quality == 8) addOption("--yes-playlist") else addOption("--no-playlist")
             addOption("--no-mtime")
             addOption("--no-warnings")
             addOption("--no-update")
